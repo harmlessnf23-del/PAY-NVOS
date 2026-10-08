@@ -1,0 +1,18 @@
+services:
+  sverka:
+    build: .
+    image: sverka-web:latest
+    container_name: sverka-web
+    restart: unless-stopped
+    ports:
+      - "8021:8021"
+    volumes:
+      - sverka-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8021/healthz',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  sverka-data:

@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Сверка платежей НВОС</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<style>
+  :root {
+    --bg: #f3f5f9;
+    --card: #ffffff;
+    --ink: #1c2333;
+    --muted: #6b7487;
+    --line: #e3e7ef;
+    --accent: #4f46e5;
+    --accent-soft: #eef0fe;
+    --green: #16a34a; --green-soft: #ecfdf3;
+    --blue: #2563eb;  --blue-soft: #eff6ff;
+    --amber: #d97706; --amber-soft: #fffbeb;
+    --red: #dc2626;   --red-soft: #fef2f2;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(900px 420px at 85% -10%, #e4e3fb 0%, transparent 60%),
+      radial-gradient(700px 380px at -10% 0%, #dcebfa 0%, transparent 55%),
+      var(--bg);
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 40px 20px 64px; }
+
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+  .logo {
+    width: 46px; height: 46px; border-radius: 13px; flex: none;
+    background: #fff; border: 1px solid #d9e8de;
+    display: grid; place-items: center; color: #6fb585; font-size: 22px;
+    box-shadow: 0 6px 18px rgba(111, 181, 133, .35);
+  }
+  h1 { font-size: 26px; margin: 0; letter-spacing: -.3px; }
+  .sub { color: var(--muted); margin: 4px 0 28px 60px; font-size: 14.5px; }
+
+  .panel {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 26px;
+    box-shadow: 0 10px 30px rgba(28, 35, 51, .06);
+  }
+
+  .quarter { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; flex-wrap: wrap; }
+  .quarter .label { font-weight: 600; font-size: 14.5px; }
+  .seg { display: inline-flex; background: #eef0f5; border-radius: 11px; padding: 4px; }
+  .seg button {
+    border: 0; background: transparent; padding: 7px 18px; border-radius: 8px;
+    font: inherit; font-size: 14px; color: var(--muted); cursor: pointer; transition: all .15s;
+  }
+  .seg button.on { background: #fff; color: var(--ink); font-weight: 600; box-shadow: 0 2px 6px rgba(0,0,0,.10); }
+  .hint { color: var(--muted); font-size: 13px; }
+  .year-inp {
+    width: 96px; padding: 9px 12px; border: 1.5px solid var(--line); border-radius: 10px;
+    font: inherit; font-size: 14px; font-weight: 600; color: var(--ink); background: #fff;
+    outline: none; transition: border-color .15s;
+  }
+  .year-inp:focus { border-color: var(--accent); }
+  .year-inp::placeholder { font-weight: 400; color: var(--muted); }
+
+  .zones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 860px) { .zones { grid-template-columns: 1fr; } }
+
+  .zone {
+    border: 1.6px dashed #c8cedb; border-radius: 14px; padding: 20px 16px;
+    text-align: center; cursor: pointer; transition: all .18s; background: #fafbfd;
+    position: relative; min-height: 168px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 8px;
+  }
+  .zone:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .zone.drag { border-color: var(--accent); background: var(--accent-soft); transform: scale(1.015); }
+  .zone.filled { border-style: solid; border-color: #b7e3c4; background: #f4fcf6; }
+  .zone .ico { font-size: 30px; line-height: 1; }
+  .zone .t { font-weight: 600; font-size: 14.5px; }
+  .zone .d { color: var(--muted); font-size: 12.5px; max-width: 230px; }
+  .zone .req { position: absolute; top: 10px; right: 12px; font-size: 11px; color: var(--red);
+               background: var(--red-soft); border-radius: 20px; padding: 2px 9px; font-weight: 600; }
+  .zone .opt { position: absolute; top: 10px; right: 12px; font-size: 11px; color: var(--muted);
+               background: #eef0f5; border-radius: 20px; padding: 2px 9px; }
+  .zone input { display: none; }
+
+  .chip {
+    display: flex; align-items: center; gap: 8px; max-width: 100%;
+    background: #fff; border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 10px; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,.05);
+  }
+  .chip .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; font-weight: 600; }
+  .chip .sz { color: var(--muted); flex: none; }
+  .chip .rm { border: 0; background: transparent; cursor: pointer; color: var(--muted);
+              font-size: 15px; padding: 0 2px; line-height: 1; }
+  .chip .rm:hover { color: var(--red); }
+
+  .actions { display: flex; align-items: center; gap: 16px; margin-top: 24px; flex-wrap: wrap; }
+  .btn {
+    border: 0; cursor: pointer; font: inherit; font-weight: 600; font-size: 15px;
+    color: #fff; padding: 13px 30px; border-radius: 12px;
+    background: linear-gradient(135deg, #6366f1, #4338ca);
+    box-shadow: 0 8px 20px rgba(79, 70, 229, .35); transition: all .18s;
+    display: inline-flex; align-items: center; gap: 10px;
+  }
+  .btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(79,70,229,.45); }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .spin {
+    width: 16px; height: 16px; border: 2.5px solid rgba(255,255,255,.4);
+    border-top-color: #fff; border-radius: 50%; animation: rot .7s linear infinite;
+  }
+  @keyframes rot { to { transform: rotate(360deg); } }
+
+  .error {
+    margin-top: 18px; padding: 13px 16px; border-radius: 12px; font-size: 14px;
+    background: var(--red-soft); color: #991b1b; border: 1px solid #fecaca; display: none;
+  }
+
+  /* результат */
+  .result { margin-top: 26px; display: none; }
+  .dl-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    background: linear-gradient(135deg, #0f766e, #15803d);
+    border-radius: var(--radius); color: #fff; padding: 20px 24px; flex-wrap: wrap;
+    box-shadow: 0 10px 26px rgba(21, 128, 61, .3);
+  }
+  .dl-bar .fn { font-weight: 600; font-size: 15px; }
+  .dl-bar .meta { font-size: 13px; opacity: .85; margin-top: 3px; }
+  .btn-dl {
+    background: #fff; color: #14532d; border: 0; cursor: pointer; font: inherit;
+    font-weight: 700; font-size: 15px; padding: 12px 26px; border-radius: 11px;
+    display: inline-flex; gap: 8px; align-items: center; text-decoration: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,.18); transition: transform .15s;
+  }
+  .btn-dl:hover { transform: translateY(-1px); }
+
+  .tblock { margin-top: 22px; }
+  .tblock h3 { margin: 0 0 12px; font-size: 16px; display: flex; align-items: center; gap: 9px; }
+  .tag { font-size: 11.5px; padding: 3px 10px; border-radius: 20px; font-weight: 600; }
+  .tag.w { background: var(--blue-soft); color: var(--blue); }
+  .tag.a { background: var(--amber-soft); color: var(--amber); }
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 860px) { .cards { grid-template-columns: repeat(2, 1fr); } }
+  .card {
+    border-radius: 13px; padding: 14px 16px; border: 1px solid var(--line); background: #fff;
+  }
+  .card .v { font-size: 26px; font-weight: 700; letter-spacing: -.5px; }
+  .card .l { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .card.g { background: var(--green-soft); border-color: #bbe7c9; } .card.g .v { color: var(--green); }
+  .card.b { background: var(--blue-soft);  border-color: #c1d9f7; } .card.b .v { color: var(--blue); }
+  .card.y { background: var(--amber-soft); border-color: #f3dfb0; } .card.y .v { color: var(--amber); }
+  .card.r { background: var(--red-soft);   border-color: #f5c6c6; } .card.r .v { color: var(--red); }
+  .sums { display: flex; gap: 26px; flex-wrap: wrap; margin-top: 12px; font-size: 13.5px; color: var(--muted); }
+  .sums b { color: var(--ink); font-size: 14.5px; }
+  .warn-line { margin-top: 8px; font-size: 13px; color: var(--amber); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 248 314" width="26" height="33" fill="none" stroke="currentColor"
+           stroke-width="18" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M9 9 H239 V224 C239 245 227 256 206 256 H152 L96 304 V256 H42 C21 256 9 245 9 224 Z"/>
+        <g transform="translate(75 142) rotate(-30)">
+          <path d="M0 -55 C-15 -30 -32 -13 -32 9 A32 32 0 1 0 32 9 C32 -13 15 -30 0 -55 Z"/>
+        </g>
+        <g transform="translate(172 90) rotate(42)">
+          <path d="M0 -42 C-11 -23 -25 -10 -25 7 A25 25 0 1 0 25 7 C25 -10 11 -23 0 -42 Z"/>
+          <path d="M-18 7 L18 7"/>
+        </g>
+        <g transform="translate(168 198) rotate(18)">
+          <path d="M0 -42 C-11 -23 -25 -10 -25 7 A25 25 0 1 0 25 7 C25 -10 11 -23 0 -42 Z"/>
+          <path d="M-4 -11 L10 -8"/>
+        </g>
+      </svg>
+    </div>
+    <h1>Сверка платежей НВОС</h1>
+  </header>
+  <p class="sub">Декларации × платёжные поручения: контроль внесения квартальных авансовых платежей (1/4 годовой суммы)</p>
+
+  <div class="panel">
+    <div class="quarter">
+      <span class="label">Отчётный период:</span>
+      <div class="seg" id="seg">
+        <button data-q="1" class="on">1 квартал</button>
+        <button data-q="2">2 квартал</button>
+        <button data-q="3">3 квартал</button>
+        <button data-q="year">Год</button>
+      </div>
+      <span class="label">Год:</span>
+      <input type="number" id="pay-year" class="year-inp" min="2000" max="2100" placeholder="любой" title="Год периода платежа (КВ.0X.ГОД). Пусто — любой год">
+      <span class="hint" id="period-hint">ожидание = 1/4 годовой суммы; учитываются платежи с периодом КВ.0X, МС.* — с пометкой «проверить»</span>
+    </div>
+
+    <div class="zones">
+      <div class="zone" id="zone-decl">
+        <span class="req">обязательно</span>
+        <div class="ico">📋</div>
+        <div class="t">Декларации</div>
+        <div class="d">Выгрузка деклараций за год — колонки (040) и (080)</div>
+        <input type="file" accept=".xlsx,.xlsm" id="file-decl">
+      </div>
+      <div class="zone" id="zone-sbros">
+        <span class="opt">сбросы · 080</span>
+        <div class="ico">💧</div>
+        <div class="t">Платежи — сбросы</div>
+        <div class="d">Сверяются с «Сумма платы за сбросы, всего (080)»</div>
+        <input type="file" accept=".xlsx,.xlsm" id="file-sbros">
+      </div>
+      <div class="zone" id="zone-vybros">
+        <span class="opt">выбросы · 040</span>
+        <div class="ico">🌫️</div>
+        <div class="t">Платежи — выбросы</div>
+        <div class="d">Сверяются с «Сумма платы за выбросы всего (040)»</div>
+        <input type="file" accept=".xlsx,.xlsm" id="file-vybros">
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn" id="go" disabled>Сформировать сверку</button>
+      <span class="hint" id="state-hint">Загрузите декларации и хотя бы один файл платежей</span>
+    </div>
+    <div class="error" id="error"></div>
+  </div>
+
+  <div class="result" id="result">
+    <div class="dl-bar">
+      <div>
+        <div class="fn" id="res-name"></div>
+        <div class="meta" id="res-meta"></div>
+      </div>
+      <a class="btn-dl" id="dl" href="#">⬇ Скачать Excel</a>
+    </div>
+    <div id="blocks"></div>
+  </div>
+</div>
+
+<script>
+const TYPE_META = {
+  sbros:  { title: 'Сбросы', tagClass: 'w', icon: '💧', code: '080' },
+  vybros: { title: 'Выбросы', tagClass: 'a', icon: '🌫️', code: '040' },
+};
+const state = { quarter: 1, files: { decl: null, sbros: null, vybros: null } };
+
+const seg = document.getElementById('seg');
+const periodHint = document.getElementById('period-hint');
+const payYear = document.getElementById('pay-year');
+payYear.value = new Date().getFullYear();
+seg.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  state.quarter = b.dataset.q;
+  seg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  periodHint.textContent = state.quarter === 'year'
+    ? 'ожидание = вся годовая сумма; учитываются платежи с периодами КВ.* и ГД.*, МС.* — с пометкой «проверить»'
+    : 'ожидание = 1/4 годовой суммы; учитываются платежи с периодом КВ.0X, МС.* — с пометкой «проверить»';
+});
+
+function fmtSize(b) {
+  if (b > 1048576) return (b / 1048576).toFixed(1) + ' МБ';
+  if (b > 1024) return Math.round(b / 1024) + ' КБ';
+  return b + ' Б';
+}
+function fmtMoney(v) {
+  return v.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
+}
+
+function setupZone(key) {
+  const zone = document.getElementById('zone-' + key);
+  const input = document.getElementById('file-' + key);
+  const orig = { ico: zone.querySelector('.ico').textContent,
+                 t: zone.querySelector('.t').textContent,
+                 d: zone.querySelector('.d').textContent };
+
+  function render() {
+    const f = state.files[key];
+    zone.classList.toggle('filled', !!f);
+    const old = zone.querySelector('.chip'); if (old) old.remove();
+    if (f) {
+      zone.querySelector('.ico').textContent = '✅';
+      zone.querySelector('.d').style.display = 'none';
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.innerHTML = `<span class="nm">${f.name}</span><span class="sz">${fmtSize(f.size)}</span>
+                        <button class="rm" title="Убрать файл">✕</button>`;
+      chip.querySelector('.rm').addEventListener('click', ev => {
+        ev.stopPropagation();
+        state.files[key] = null; input.value = '';
+        render();
+      });
+      zone.appendChild(chip);
+    } else {
+      zone.querySelector('.ico').textContent = orig.ico;
+      zone.querySelector('.d').style.display = '';
+    }
+    updateGo();
+  }
+  function accept(f) {
+    if (!f) return;
+    if (!/\.(xlsx|xlsm)$/i.test(f.name)) { showError('Нужен файл Excel (.xlsx)'); return; }
+    hideError();
+    state.files[key] = f;
+    render();
+  }
+  zone.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => accept(input.files[0]));
+  ['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, e => {
+    e.preventDefault(); zone.classList.add('drag');
+  }));
+  ['dragleave', 'drop'].forEach(ev => zone.addEventListener(ev, e => {
+    e.preventDefault(); zone.classList.remove('drag');
+  }));
+  zone.addEventListener('drop', e => accept(e.dataTransfer.files[0]));
+}
+['decl', 'sbros', 'vybros'].forEach(setupZone);
+
+const go = document.getElementById('go');
+const hint = document.getElementById('state-hint');
+function updateGo() {
+  const ok = state.files.decl && (state.files.sbros || state.files.vybros);
+  go.disabled = !ok;
+  hint.textContent = ok ? 'Готово к запуску' : 'Загрузите декларации и хотя бы один файл платежей';
+}
+
+const errBox = document.getElementById('error');
+function showError(msg) { errBox.textContent = msg; errBox.style.display = 'block'; }
+function hideError() { errBox.style.display = 'none'; }
+
+go.addEventListener('click', async () => {
+  hideError();
+  document.getElementById('result').style.display = 'none';
+  go.disabled = true;
+  go.innerHTML = '<span class="spin"></span> Обработка…';
+  try {
+    const fd = new FormData();
+    fd.append('quarter', state.quarter);
+    fd.append('year', payYear.value.trim());
+    fd.append('decl', state.files.decl);
+    if (state.files.sbros) fd.append('sbros', state.files.sbros);
+    if (state.files.vybros) fd.append('vybros', state.files.vybros);
+    const resp = await fetch('/api/reconcile', { method: 'POST', body: fd });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || ('Ошибка сервера: ' + resp.status));
+    renderResult(data);
+  } catch (e) {
+    showError(e.message || String(e));
+  } finally {
+    go.innerHTML = 'Сформировать сверку';
+    updateGo();
+  }
+});
+
+function card(cls, v, l) {
+  return `<div class="card ${cls}"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+}
+
+function renderResult(data) {
+  document.getElementById('res-name').textContent = data.filename;
+  const types = Object.keys(data.stats);
+  let periodLabel = data.quarter === 'year' ? 'Год' : `Квартал ${data.quarter}`;
+  periodLabel += data.year ? ` · ${data.year}` : ' · любой год';
+  document.getElementById('res-meta').textContent =
+    `${periodLabel} · типов сверки: ${types.length}`;
+  document.getElementById('dl').href = '/api/download/' + data.download_id;
+
+  const blocks = document.getElementById('blocks');
+  blocks.innerHTML = '';
+  for (const t of ['sbros', 'vybros']) {
+    const st = data.stats[t];
+    if (!st) continue;
+    const m = TYPE_META[t];
+    const div = document.createElement('div');
+    div.className = 'tblock panel';
+    let warn = '';
+    if (st.payments_skipped) {
+      warn += `<div class="warn-line">⚠ Не учтено по периоду: ${st.payments_skipped} платежек</div>`;
+    }
+    if (st.no_decl_count) {
+      warn += `<div class="warn-line">⚠ Платежи без декларации: ${st.no_decl_count} шт на ${fmtMoney(st.no_decl_sum)}</div>`;
+    }
+    div.innerHTML = `
+      <h3>${m.icon} ${m.title} <span class="tag ${m.tagClass}">строка ${m.code}</span>
+          <span class="hint" style="font-weight:400">деклараций: ${st.decl_count}</span></h3>
+      <div class="cards">
+        ${card('g', st.paid_ok, 'Оплачено')}
+        ${card('b', st.overpaid, 'Переплата')}
+        ${card('y', st.underpaid, 'Недоплата')}
+        ${card('r', st.not_paid, 'Не оплачено')}
+      </div>
+      <div class="sums">
+        <span>${data.quarter === 'year' ? 'Ожидалось за год' : 'Ожидалось за квартал'}: <b>${fmtMoney(st.expected_total)}</b></span>
+        <span>Поступило: <b>${fmtMoney(st.paid_total)}</b></span>
+        <span>Платежек в файле: <b>${st.payments_total}</b></span>
+      </div>
+      ${warn}`;
+    blocks.appendChild(div);
+  }
+  document.getElementById('result').style.display = 'block';
+  document.getElementById('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+</script>
+</body>
+</html>
