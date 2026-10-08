@@ -5,244 +5,239 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Сверка платежей НВОС</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <style>
-  :root {
-    --bg: #f3f5f9;
-    --card: #ffffff;
-    --ink: #1c2333;
-    --muted: #6b7487;
-    --line: #e3e7ef;
-    --accent: #4f46e5;
-    --accent-soft: #eef0fe;
-    --green: #16a34a; --green-soft: #ecfdf3;
-    --blue: #2563eb;  --blue-soft: #eff6ff;
-    --amber: #d97706; --amber-soft: #fffbeb;
-    --red: #dc2626;   --red-soft: #fef2f2;
-    --radius: 16px;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; min-height: 100vh;
-    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-    color: var(--ink);
-    background:
-      radial-gradient(900px 420px at 85% -10%, #e4e3fb 0%, transparent 60%),
-      radial-gradient(700px 380px at -10% 0%, #dcebfa 0%, transparent 55%),
-      var(--bg);
-  }
-  .wrap { max-width: 1060px; margin: 0 auto; padding: 40px 20px 64px; }
+/* Дизайн-система «Контроль Москвы · Экология» — как в «Сверке НВОС»:
+   Inter, текст #0B1F33, подписи #718096, зелёный #479C80, скругления 6–8px, теги 4px */
+:root{
+  --bg:#F7FAFC; --surface:#FFFFFF; --surface-2:#EDF2F7;
+  --fg:#0B1F33; --fg-2:#2D3748; --muted:#718096;
+  --line:rgba(11,31,51,.16); --line-2:#CBD5E0; --tabline:#D5DEF4;
+  --accent:#479C80; --accent-hover:#3A7F65; --accent-soft:#E3F3EF; --accent-text:#3A7F65;
+  --accent-100:#BBE1D6; --accent-800:#346E58;
+  --err:#C53030; --err-text:#9B2C2C; --err-soft:#FED7D7; --err-dot:#E53E3E;
+  --warn:#7A5600; --warn-soft:#FFF4CC; --warn-fill:#ECB000;
+  --info:#0D4CD3; --info-soft:#EBF4FF;
+  --f-ui:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --r:8px; --r-s:6px;
+}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font-family:var(--f-ui);font-size:14px;line-height:1.4;color:var(--fg);background:var(--bg);-webkit-font-smoothing:antialiased}
+h1,h2,h3{margin:0}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
 
-  header { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
-  .logo {
-    width: 46px; height: 46px; border-radius: 13px; flex: none;
-    background: #fff; border: 1px solid #d9e8de;
-    display: grid; place-items: center; color: #6fb585; font-size: 22px;
-    box-shadow: 0 6px 18px rgba(111, 181, 133, .35);
-  }
-  h1 { font-size: 26px; margin: 0; letter-spacing: -.3px; }
-  .sub { color: var(--muted); margin: 4px 0 28px 60px; font-size: 14.5px; }
+/* ---------- шапка ---------- */
+.mh{position:sticky;top:0;z-index:20;height:64px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:24px;padding:0 24px}
+.wm{display:inline-flex;flex-direction:column;align-items:flex-start;line-height:1;user-select:none}
+.wm-t{display:inline-flex;align-items:center;font-size:21px;font-weight:800;letter-spacing:.01em;color:var(--fg)}
+.wm-o{display:inline-block;width:25px;height:25px;margin:0 0 0 1px;transform:translateY(1px)}
+.wm-o svg{width:100%;height:100%;display:block;overflow:visible}
+.wm-s{margin-top:3px;font-size:8.5px;font-weight:600;letter-spacing:.42em;color:var(--muted);padding-left:1px}
+.mh-crumb{font-size:16px;font-weight:600;color:var(--muted)}
+.mh-crumb::before{content:"/";margin-right:8px;color:var(--line-2)}
+.mh-sp{flex:1}
+.mh-av{width:40px;height:40px;border-radius:8px;background:var(--surface-2);color:var(--muted);display:grid;place-items:center;font-weight:600;font-size:14px;flex:none}
 
-  .panel {
-    background: var(--card); border: 1px solid var(--line);
-    border-radius: var(--radius); padding: 26px;
-    box-shadow: 0 10px 30px rgba(28, 35, 51, .06);
-  }
+/* ---------- страница ---------- */
+.main{max-width:1180px;margin:0 auto;padding:24px 32px 64px;display:flex;flex-direction:column;gap:20px}
+.topbar h1{font-size:20px;font-weight:600}
+.topbar p{margin:4px 0 0;color:var(--muted)}
 
-  .quarter { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; flex-wrap: wrap; }
-  .quarter .label { font-weight: 600; font-size: 14.5px; }
-  .seg { display: inline-flex; background: #eef0f5; border-radius: 11px; padding: 4px; }
-  .seg button {
-    border: 0; background: transparent; padding: 7px 18px; border-radius: 8px;
-    font: inherit; font-size: 14px; color: var(--muted); cursor: pointer; transition: all .15s;
-  }
-  .seg button.on { background: #fff; color: var(--ink); font-weight: 600; box-shadow: 0 2px 6px rgba(0,0,0,.10); }
-  .hint { color: var(--muted); font-size: 13px; }
-  .year-inp {
-    width: 96px; padding: 9px 12px; border: 1.5px solid var(--line); border-radius: 10px;
-    font: inherit; font-size: 14px; font-weight: 600; color: var(--ink); background: #fff;
-    outline: none; transition: border-color .15s;
-  }
-  .year-inp:focus { border-color: var(--accent); }
-  .year-inp::placeholder { font-weight: 400; color: var(--muted); }
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.panel{padding:20px;display:flex;flex-direction:column;gap:20px}
 
-  .zones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-  @media (max-width: 860px) { .zones { grid-template-columns: 1fr; } }
+/* период */
+.period{display:flex;flex-wrap:wrap;align-items:center;gap:12px 24px}
+.fld{display:flex;align-items:center;gap:10px}
+.fld .lbl{font-size:13px;color:var(--muted)}
+.segm{display:inline-flex;flex-wrap:wrap;gap:8px}
+.segm button{border:0;background:transparent;border-radius:6px;padding:8px 12px;color:var(--fg);font-weight:600;font-size:14px;cursor:pointer;white-space:nowrap}
+.segm button:hover{background:var(--bg)}
+.segm button.on{background:var(--accent-soft);color:var(--accent-text)}
+.year-inp{width:110px;height:40px;border:0;border-radius:6px;background:var(--surface-2);padding:0 12px;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.year-inp:focus{outline:2px solid var(--accent);outline-offset:0}
+.year-inp::placeholder{font-weight:400;color:var(--muted)}
+.hint{color:var(--muted);font-size:13px}
+.period .hint{flex-basis:100%;margin-top:-4px}
 
-  .zone {
-    border: 1.6px dashed #c8cedb; border-radius: 14px; padding: 20px 16px;
-    text-align: center; cursor: pointer; transition: all .18s; background: #fafbfd;
-    position: relative; min-height: 168px; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 8px;
-  }
-  .zone:hover { border-color: var(--accent); background: var(--accent-soft); }
-  .zone.drag { border-color: var(--accent); background: var(--accent-soft); transform: scale(1.015); }
-  .zone.filled { border-style: solid; border-color: #b7e3c4; background: #f4fcf6; }
-  .zone .ico { font-size: 30px; line-height: 1; }
-  .zone .t { font-weight: 600; font-size: 14.5px; }
-  .zone .d { color: var(--muted); font-size: 12.5px; max-width: 230px; }
-  .zone .req { position: absolute; top: 10px; right: 12px; font-size: 11px; color: var(--red);
-               background: var(--red-soft); border-radius: 20px; padding: 2px 9px; font-weight: 600; }
-  .zone .opt { position: absolute; top: 10px; right: 12px; font-size: 11px; color: var(--muted);
-               background: #eef0f5; border-radius: 20px; padding: 2px 9px; }
-  .zone input { display: none; }
+/* загрузка файлов */
+.zones{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.slot{padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.slot-h{display:flex;align-items:flex-start;gap:10px}
+.step{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:600;background:var(--surface-2);color:var(--muted);flex:none;margin-top:1px}
+.slot.filled .step{background:var(--accent);color:#fff}
+.slot-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.slot-t b{font-size:16px;font-weight:600}
+.slot-t small{color:var(--muted);font-size:12.5px;line-height:1.35}
+.tag{display:inline-block;border-radius:4px;font-size:12px;font-weight:500;padding:3px 8px;line-height:1.4;white-space:nowrap;background:#E2E8F0;color:#1A202C}
+.tag.req{background:var(--err-soft);color:var(--err-text)}
+.tag.ok{background:var(--accent-100);color:var(--accent-800)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.drop{flex:1;border:1.5px dashed var(--line-2);border-radius:8px;background:var(--bg);padding:20px 10px;text-align:center;color:var(--muted);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:110px;transition:background .15s,border-color .15s}
+.drop:hover,.slot.drag .drop{border-color:var(--accent);background:var(--accent-soft);color:var(--fg)}
+.drop svg{color:var(--accent)}
+.drop u{color:var(--accent-text);text-decoration-thickness:1px;text-underline-offset:3px}
+.drop small{font-size:12px}
+.slot input[type=file]{display:none}
+.file{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:6px;background:var(--accent-soft);min-width:0}
+.file svg{color:var(--accent);flex:none}
+.file .nm{flex:1;min-width:0;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file .sz{color:var(--muted);font-size:12.5px;flex:none}
+.file .rm{all:unset;cursor:pointer;width:24px;height:24px;border-radius:4px;display:grid;place-items:center;color:var(--muted);flex:none}
+.file .rm:hover{background:#fff;color:var(--err)}
 
-  .chip {
-    display: flex; align-items: center; gap: 8px; max-width: 100%;
-    background: #fff; border: 1px solid var(--line); border-radius: 10px;
-    padding: 8px 10px; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,.05);
-  }
-  .chip .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; font-weight: 600; }
-  .chip .sz { color: var(--muted); flex: none; }
-  .chip .rm { border: 0; background: transparent; cursor: pointer; color: var(--muted);
-              font-size: 15px; padding: 0 2px; line-height: 1; }
-  .chip .rm:hover { color: var(--red); }
+/* кнопки */
+.actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding-top:4px;border-top:1px solid var(--line);padding-top:16px}
+.btn{border:0;cursor:pointer;border-radius:6px;height:40px;padding:0 16px;font-weight:600;font-size:14px;display:inline-flex;align-items:center;gap:8px;text-decoration:none;transition:background .15s}
+.btn.primary{background:var(--accent);color:#fff}
+.btn.primary:hover:not(:disabled){background:var(--accent-hover)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;animation:rot .7s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
 
-  .actions { display: flex; align-items: center; gap: 16px; margin-top: 24px; flex-wrap: wrap; }
-  .btn {
-    border: 0; cursor: pointer; font: inherit; font-weight: 600; font-size: 15px;
-    color: #fff; padding: 13px 30px; border-radius: 12px;
-    background: linear-gradient(135deg, #6366f1, #4338ca);
-    box-shadow: 0 8px 20px rgba(79, 70, 229, .35); transition: all .18s;
-    display: inline-flex; align-items: center; gap: 10px;
-  }
-  .btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(79,70,229,.45); }
-  .btn:disabled { opacity: .55; cursor: not-allowed; }
-  .spin {
-    width: 16px; height: 16px; border: 2.5px solid rgba(255,255,255,.4);
-    border-top-color: #fff; border-radius: 50%; animation: rot .7s linear infinite;
-  }
-  @keyframes rot { to { transform: rotate(360deg); } }
+.error{padding:10px 12px;border-radius:6px;background:var(--err-soft);color:var(--err-text);font-size:14px;display:none}
 
-  .error {
-    margin-top: 18px; padding: 13px 16px; border-radius: 12px; font-size: 14px;
-    background: var(--red-soft); color: #991b1b; border: 1px solid #fecaca; display: none;
-  }
+/* ---------- результат ---------- */
+.result{display:none;flex-direction:column;gap:20px}
+.dl-bar{padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;border-left:4px solid var(--accent)}
+.dl-bar .fn{font-weight:600;font-size:15px;word-break:break-word}
+.dl-bar .meta{font-size:13px;color:var(--muted);margin-top:3px}
 
-  /* результат */
-  .result { margin-top: 26px; display: none; }
-  .dl-bar {
-    display: flex; align-items: center; justify-content: space-between; gap: 16px;
-    background: linear-gradient(135deg, #0f766e, #15803d);
-    border-radius: var(--radius); color: #fff; padding: 20px 24px; flex-wrap: wrap;
-    box-shadow: 0 10px 26px rgba(21, 128, 61, .3);
-  }
-  .dl-bar .fn { font-weight: 600; font-size: 15px; }
-  .dl-bar .meta { font-size: 13px; opacity: .85; margin-top: 3px; }
-  .btn-dl {
-    background: #fff; color: #14532d; border: 0; cursor: pointer; font: inherit;
-    font-weight: 700; font-size: 15px; padding: 12px 26px; border-radius: 11px;
-    display: inline-flex; gap: 8px; align-items: center; text-decoration: none;
-    box-shadow: 0 4px 12px rgba(0,0,0,.18); transition: transform .15s;
-  }
-  .btn-dl:hover { transform: translateY(-1px); }
+.tblock{padding:20px;display:flex;flex-direction:column;gap:16px}
+.tblock-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tblock-h h2{font-size:16px;font-weight:600}
+.tblock-h .hint{margin-left:auto}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kpi{padding:14px 16px;border:1px solid var(--line);border-radius:8px;min-width:0}
+.kpi .lbl{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:8px}
+.kpi .lbl i{width:8px;height:8px;border-radius:50%;flex:none}
+.kpi .big{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.25;margin-top:4px}
+.kpi.ok .lbl i{background:var(--accent)}
+.kpi.info .lbl i{background:var(--info)}
+.kpi.warn .lbl i{background:var(--warn-fill);border-radius:0;clip-path:polygon(50% 0,100% 100%,0 100%);width:10px;height:9px}
+.kpi.err .lbl i{background:var(--err-dot)}
+.kpi.err .big{color:var(--err)}
+.sums{display:flex;flex-wrap:wrap;gap:8px 28px;font-size:13px;color:var(--muted)}
+.sums b{color:var(--fg);font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.warns{display:flex;flex-direction:column;gap:6px}
+.warn-line{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--warn);background:var(--warn-soft);border-radius:6px;padding:8px 12px}
+.warn-line::before{content:"";width:9px;height:8px;background:var(--warn-fill);clip-path:polygon(50% 0,100% 100%,0 100%);flex:none}
 
-  .tblock { margin-top: 22px; }
-  .tblock h3 { margin: 0 0 12px; font-size: 16px; display: flex; align-items: center; gap: 9px; }
-  .tag { font-size: 11.5px; padding: 3px 10px; border-radius: 20px; font-weight: 600; }
-  .tag.w { background: var(--blue-soft); color: var(--blue); }
-  .tag.a { background: var(--amber-soft); color: var(--amber); }
-  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-  @media (max-width: 860px) { .cards { grid-template-columns: repeat(2, 1fr); } }
-  .card {
-    border-radius: 13px; padding: 14px 16px; border: 1px solid var(--line); background: #fff;
-  }
-  .card .v { font-size: 26px; font-weight: 700; letter-spacing: -.5px; }
-  .card .l { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
-  .card.g { background: var(--green-soft); border-color: #bbe7c9; } .card.g .v { color: var(--green); }
-  .card.b { background: var(--blue-soft);  border-color: #c1d9f7; } .card.b .v { color: var(--blue); }
-  .card.y { background: var(--amber-soft); border-color: #f3dfb0; } .card.y .v { color: var(--amber); }
-  .card.r { background: var(--red-soft);   border-color: #f5c6c6; } .card.r .v { color: var(--red); }
-  .sums { display: flex; gap: 26px; flex-wrap: wrap; margin-top: 12px; font-size: 13.5px; color: var(--muted); }
-  .sums b { color: var(--ink); font-size: 14.5px; }
-  .warn-line { margin-top: 8px; font-size: 13px; color: var(--amber); }
+@media (max-width:900px){
+  .zones{grid-template-columns:1fr}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:640px){
+  .mh{gap:12px;padding:0 16px}
+  .mh-crumb{display:none}
+  .main{padding:16px 16px 48px}
+  .tblock-h .hint{margin-left:0;flex-basis:100%}
+}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div class="logo">
-      <svg viewBox="0 0 248 314" width="26" height="33" fill="none" stroke="currentColor"
-           stroke-width="18" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M9 9 H239 V224 C239 245 227 256 206 256 H152 L96 304 V256 H42 C21 256 9 245 9 224 Z"/>
-        <g transform="translate(75 142) rotate(-30)">
-          <path d="M0 -55 C-15 -30 -32 -13 -32 9 A32 32 0 1 0 32 9 C32 -13 15 -30 0 -55 Z"/>
-        </g>
-        <g transform="translate(172 90) rotate(42)">
-          <path d="M0 -42 C-11 -23 -25 -10 -25 7 A25 25 0 1 0 25 7 C25 -10 11 -23 0 -42 Z"/>
-          <path d="M-18 7 L18 7"/>
-        </g>
-        <g transform="translate(168 198) rotate(18)">
-          <path d="M0 -42 C-11 -23 -25 -10 -25 7 A25 25 0 1 0 25 7 C25 -10 11 -23 0 -42 Z"/>
-          <path d="M-4 -11 L10 -8"/>
-        </g>
-      </svg>
-    </div>
-    <h1>Сверка платежей НВОС</h1>
-  </header>
-  <p class="sub">Декларации × платёжные поручения: контроль внесения квартальных авансовых платежей (1/4 годовой суммы)</p>
 
-  <div class="panel">
-    <div class="quarter">
-      <span class="label">Отчётный период:</span>
-      <div class="seg" id="seg">
-        <button data-q="1" class="on">1 квартал</button>
-        <button data-q="2">2 квартал</button>
-        <button data-q="3">3 квартал</button>
-        <button data-q="year">Год</button>
+<header class="mh">
+  <div role="img" aria-label="НВОС · Сверка платежей">
+    <span class="wm" aria-hidden="true">
+      <span class="wm-t">НВ<span class="wm-o"><svg viewBox="0 0 48 48"><circle cx="20" cy="20" r="12.5" fill="#E3F3EF"/><g fill="#0B1F33"><rect x="11.5" y="21.5" width="3.2" height="6"/><rect x="15.5" y="18.5" width="3.2" height="9"/><rect x="19.5" y="14.5" width="3.2" height="13"/><rect x="23.5" y="20" width="3.2" height="7.5"/><rect x="10" y="27.5" width="20" height="1.6"/></g><g fill="#A0AEC0"><circle cx="22.6" cy="12" r="1.8"/><circle cx="25.2" cy="9.4" r="1.3"/></g><line x1="30" y1="30" x2="41" y2="41" stroke="#346E58" stroke-width="5.5" stroke-linecap="round"/><circle cx="20" cy="20" r="13.5" fill="none" stroke="#479C80" stroke-width="4"/></svg></span>С</span>
+      <span class="wm-s">ПЛАТЕЖИ</span>
+    </span>
+  </div>
+  <span class="mh-crumb">Сверка платежей</span>
+  <span class="mh-sp"></span>
+  <span class="mh-av" aria-hidden="true">ДП</span>
+</header>
+
+<main class="main">
+  <div class="topbar">
+    <h1>Сверка платежей НВОС</h1>
+    <p>Декларации × платёжные поручения: контроль внесения квартальных авансовых платежей (1/4 годовой суммы)</p>
+  </div>
+
+  <section class="card panel">
+    <div class="period">
+      <div class="fld">
+        <span class="lbl">Отчётный период</span>
+        <div class="segm" id="seg">
+          <button data-q="1" class="on">1 квартал</button>
+          <button data-q="2">2 квартал</button>
+          <button data-q="3">3 квартал</button>
+          <button data-q="year">Год</button>
+        </div>
       </div>
-      <span class="label">Год:</span>
-      <input type="number" id="pay-year" class="year-inp" min="2000" max="2100" placeholder="любой" title="Год периода платежа (КВ.0X.ГОД). Пусто — любой год">
-      <span class="hint" id="period-hint">ожидание = 1/4 годовой суммы; учитываются платежи с периодом КВ.0X, МС.* — с пометкой «проверить»</span>
+      <label class="fld">
+        <span class="lbl">Год платежа</span>
+        <input type="number" id="pay-year" class="year-inp" min="2000" max="2100" placeholder="любой" title="Год периода платежа (КВ.0X.ГОД). Пусто — любой год">
+      </label>
+      <span class="hint" id="period-hint">Ожидание = 1/4 годовой суммы; учитываются платежи с периодом КВ.0X, МС.* — с пометкой «проверить»</span>
     </div>
 
     <div class="zones">
-      <div class="zone" id="zone-decl">
-        <span class="req">обязательно</span>
-        <div class="ico">📋</div>
-        <div class="t">Декларации</div>
-        <div class="d">Выгрузка деклараций за год — колонки (040) и (080)</div>
+      <div class="card slot" id="zone-decl">
+        <div class="slot-h">
+          <span class="step">1</span>
+          <div class="slot-t"><b>Декларации</b><small>Выгрузка деклараций за год — колонки (040) и (080)</small></div>
+          <span class="tag req">обязательно</span>
+        </div>
+        <div class="body"></div>
         <input type="file" accept=".xlsx,.xlsm" id="file-decl">
       </div>
-      <div class="zone" id="zone-sbros">
-        <span class="opt">сбросы · 080</span>
-        <div class="ico">💧</div>
-        <div class="t">Платежи — сбросы</div>
-        <div class="d">Сверяются с «Сумма платы за сбросы, всего (080)»</div>
+      <div class="card slot" id="zone-sbros">
+        <div class="slot-h">
+          <span class="step">2</span>
+          <div class="slot-t"><b>Платежи — сбросы</b><small>Сверяются с «Сумма платы за сбросы, всего (080)»</small></div>
+          <span class="tag">080</span>
+        </div>
+        <div class="body"></div>
         <input type="file" accept=".xlsx,.xlsm" id="file-sbros">
       </div>
-      <div class="zone" id="zone-vybros">
-        <span class="opt">выбросы · 040</span>
-        <div class="ico">🌫️</div>
-        <div class="t">Платежи — выбросы</div>
-        <div class="d">Сверяются с «Сумма платы за выбросы всего (040)»</div>
+      <div class="card slot" id="zone-vybros">
+        <div class="slot-h">
+          <span class="step">3</span>
+          <div class="slot-t"><b>Платежи — выбросы</b><small>Сверяются с «Сумма платы за выбросы всего (040)»</small></div>
+          <span class="tag">040</span>
+        </div>
+        <div class="body"></div>
         <input type="file" accept=".xlsx,.xlsm" id="file-vybros">
       </div>
     </div>
 
     <div class="actions">
-      <button class="btn" id="go" disabled>Сформировать сверку</button>
+      <button class="btn primary" id="go" disabled>Сформировать сверку</button>
       <span class="hint" id="state-hint">Загрузите декларации и хотя бы один файл платежей</span>
     </div>
-    <div class="error" id="error"></div>
-  </div>
+    <div class="error" id="error" role="alert"></div>
+  </section>
 
-  <div class="result" id="result">
-    <div class="dl-bar">
+  <section class="result" id="result">
+    <div class="card dl-bar">
       <div>
         <div class="fn" id="res-name"></div>
         <div class="meta" id="res-meta"></div>
       </div>
-      <a class="btn-dl" id="dl" href="#">⬇ Скачать Excel</a>
+      <a class="btn primary" id="dl" href="#">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+        Скачать Excel
+      </a>
     </div>
-    <div id="blocks"></div>
-  </div>
-</div>
+    <div id="blocks" style="display:flex;flex-direction:column;gap:20px"></div>
+  </section>
+</main>
 
 <script>
 const TYPE_META = {
-  sbros:  { title: 'Сбросы', tagClass: 'w', icon: '💧', code: '080' },
-  vybros: { title: 'Выбросы', tagClass: 'a', icon: '🌫️', code: '040' },
+  sbros:  { title: 'Сбросы',  code: '080' },
+  vybros: { title: 'Выбросы', code: '040' },
 };
+const ICON_UP = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>';
+const ICON_FILE = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>';
+const ICON_X = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
 const state = { quarter: 1, files: { decl: null, sbros: null, vybros: null } };
 
 const seg = document.getElementById('seg');
@@ -254,10 +249,13 @@ seg.addEventListener('click', e => {
   state.quarter = b.dataset.q;
   seg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
   periodHint.textContent = state.quarter === 'year'
-    ? 'ожидание = вся годовая сумма; учитываются платежи с периодами КВ.* и ГД.*, МС.* — с пометкой «проверить»'
-    : 'ожидание = 1/4 годовой суммы; учитываются платежи с периодом КВ.0X, МС.* — с пометкой «проверить»';
+    ? 'Ожидание = вся годовая сумма; учитываются платежи с периодами КВ.* и ГД.*, МС.* — с пометкой «проверить»'
+    : 'Ожидание = 1/4 годовой суммы; учитываются платежи с периодом КВ.0X, МС.* — с пометкой «проверить»';
 });
 
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 function fmtSize(b) {
   if (b > 1048576) return (b / 1048576).toFixed(1) + ' МБ';
   if (b > 1024) return Math.round(b / 1024) + ' КБ';
@@ -270,30 +268,25 @@ function fmtMoney(v) {
 function setupZone(key) {
   const zone = document.getElementById('zone-' + key);
   const input = document.getElementById('file-' + key);
-  const orig = { ico: zone.querySelector('.ico').textContent,
-                 t: zone.querySelector('.t').textContent,
-                 d: zone.querySelector('.d').textContent };
+  const body = zone.querySelector('.body');
 
   function render() {
     const f = state.files[key];
     zone.classList.toggle('filled', !!f);
-    const old = zone.querySelector('.chip'); if (old) old.remove();
     if (f) {
-      zone.querySelector('.ico').textContent = '✅';
-      zone.querySelector('.d').style.display = 'none';
-      const chip = document.createElement('div');
-      chip.className = 'chip';
-      chip.innerHTML = `<span class="nm">${f.name}</span><span class="sz">${fmtSize(f.size)}</span>
-                        <button class="rm" title="Убрать файл">✕</button>`;
-      chip.querySelector('.rm').addEventListener('click', ev => {
+      body.innerHTML = `<div class="file">${ICON_FILE}<span class="nm" title="${esc(f.name)}">${esc(f.name)}</span>
+        <span class="sz">${fmtSize(f.size)}</span><button class="rm" title="Убрать файл" aria-label="Убрать файл">${ICON_X}</button></div>`;
+      body.querySelector('.rm').addEventListener('click', ev => {
         ev.stopPropagation();
         state.files[key] = null; input.value = '';
         render();
       });
-      zone.appendChild(chip);
     } else {
-      zone.querySelector('.ico').textContent = orig.ico;
-      zone.querySelector('.d').style.display = '';
+      body.innerHTML = `<div class="drop" role="button" tabindex="0">${ICON_UP}
+        <span>Перетащите файл или <u>выберите</u></span><small>Excel · .xlsx</small></div>`;
+      const drop = body.querySelector('.drop');
+      drop.addEventListener('click', () => input.click());
+      drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
     }
     updateGo();
   }
@@ -304,7 +297,6 @@ function setupZone(key) {
     state.files[key] = f;
     render();
   }
-  zone.addEventListener('click', () => input.click());
   input.addEventListener('change', () => accept(input.files[0]));
   ['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, e => {
     e.preventDefault(); zone.classList.add('drag');
@@ -313,8 +305,8 @@ function setupZone(key) {
     e.preventDefault(); zone.classList.remove('drag');
   }));
   zone.addEventListener('drop', e => accept(e.dataTransfer.files[0]));
+  render();
 }
-['decl', 'sbros', 'vybros'].forEach(setupZone);
 
 const go = document.getElementById('go');
 const hint = document.getElementById('state-hint');
@@ -323,6 +315,7 @@ function updateGo() {
   go.disabled = !ok;
   hint.textContent = ok ? 'Готово к запуску' : 'Загрузите декларации и хотя бы один файл платежей';
 }
+['decl', 'sbros', 'vybros'].forEach(setupZone);
 
 const errBox = document.getElementById('error');
 function showError(msg) { errBox.textContent = msg; errBox.style.display = 'block'; }
@@ -352,8 +345,8 @@ go.addEventListener('click', async () => {
   }
 });
 
-function card(cls, v, l) {
-  return `<div class="card ${cls}"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+function kpi(cls, v, l) {
+  return `<div class="kpi ${cls}"><div class="lbl"><i></i>${l}</div><div class="big">${v}</div></div>`;
 }
 
 function renderResult(data) {
@@ -361,8 +354,7 @@ function renderResult(data) {
   const types = Object.keys(data.stats);
   let periodLabel = data.quarter === 'year' ? 'Год' : `Квартал ${data.quarter}`;
   periodLabel += data.year ? ` · ${data.year}` : ' · любой год';
-  document.getElementById('res-meta').textContent =
-    `${periodLabel} · типов сверки: ${types.length}`;
+  document.getElementById('res-meta').textContent = `${periodLabel} · типов сверки: ${types.length}`;
   document.getElementById('dl').href = '/api/download/' + data.download_id;
 
   const blocks = document.getElementById('blocks');
@@ -371,34 +363,37 @@ function renderResult(data) {
     const st = data.stats[t];
     if (!st) continue;
     const m = TYPE_META[t];
-    const div = document.createElement('div');
-    div.className = 'tblock panel';
     let warn = '';
     if (st.payments_skipped) {
-      warn += `<div class="warn-line">⚠ Не учтено по периоду: ${st.payments_skipped} платежек</div>`;
+      warn += `<div class="warn-line">Не учтено по периоду: ${st.payments_skipped} платёжек</div>`;
     }
     if (st.no_decl_count) {
-      warn += `<div class="warn-line">⚠ Платежи без декларации: ${st.no_decl_count} шт на ${fmtMoney(st.no_decl_sum)}</div>`;
+      warn += `<div class="warn-line">Платежи без декларации: ${st.no_decl_count} шт. на ${fmtMoney(st.no_decl_sum)}</div>`;
     }
+    const div = document.createElement('div');
+    div.className = 'card tblock';
     div.innerHTML = `
-      <h3>${m.icon} ${m.title} <span class="tag ${m.tagClass}">строка ${m.code}</span>
-          <span class="hint" style="font-weight:400">деклараций: ${st.decl_count}</span></h3>
-      <div class="cards">
-        ${card('g', st.paid_ok, 'Оплачено')}
-        ${card('b', st.overpaid, 'Переплата')}
-        ${card('y', st.underpaid, 'Недоплата')}
-        ${card('r', st.not_paid, 'Не оплачено')}
+      <div class="tblock-h">
+        <h2>${m.title}</h2><span class="tag">строка ${m.code}</span>
+        <span class="hint">Деклараций: <b class="num">${st.decl_count}</b></span>
+      </div>
+      <div class="kpis">
+        ${kpi('ok', st.paid_ok, 'Оплачено')}
+        ${kpi('info', st.overpaid, 'Переплата')}
+        ${kpi('warn', st.underpaid, 'Недоплата')}
+        ${kpi('err', st.not_paid, 'Не оплачено')}
       </div>
       <div class="sums">
         <span>${data.quarter === 'year' ? 'Ожидалось за год' : 'Ожидалось за квартал'}: <b>${fmtMoney(st.expected_total)}</b></span>
         <span>Поступило: <b>${fmtMoney(st.paid_total)}</b></span>
-        <span>Платежек в файле: <b>${st.payments_total}</b></span>
+        <span>Платёжек в файле: <b>${st.payments_total}</b></span>
       </div>
-      ${warn}`;
+      ${warn ? `<div class="warns">${warn}</div>` : ''}`;
     blocks.appendChild(div);
   }
-  document.getElementById('result').style.display = 'block';
-  document.getElementById('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const res = document.getElementById('result');
+  res.style.display = 'flex';
+  res.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 </script>
 </body>
