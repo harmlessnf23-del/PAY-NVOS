@@ -1,0 +1,15 @@
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.venv
+venv
+.git
+.gitignore
+.idea
+.vscode
+_*.xlsx
+_*.json
+_*.txt
+README.md
+start.bat
