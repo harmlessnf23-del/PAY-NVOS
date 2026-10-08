@@ -17,7 +17,7 @@
   --err:#C53030; --err-text:#9B2C2C; --err-soft:#FED7D7; --err-dot:#E53E3E;
   --warn:#7A5600; --warn-soft:#FFF4CC; --warn-fill:#ECB000;
   --info:#0D4CD3; --info-soft:#EBF4FF;
-  --tag:#E2E8F0; --tag-fg:#1A202C; --toast:#0B1F33; --on-accent:#FFFFFF;
+  --tag:#E2E8F0; --err-row:#FFF5F5; --warn-row:#FFFBEB; --info-row:#F3F8FF; --tag-fg:#1A202C; --toast:#0B1F33; --on-accent:#FFFFFF;
   --f-ui:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   --r:8px; --r-s:6px;
 }
@@ -132,6 +132,38 @@ button,input{font:inherit;color:inherit}
 .legend{display:inline-flex;gap:4px;align-items:center}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;border:1px solid var(--line)}
 
+/* расшифровка по декларациям */
+.dt{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--line);padding-top:16px}
+.dt-h{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.dt-h h3{margin:0;font-size:15px;font-weight:600}
+.dt-tabs{display:inline-flex;flex-wrap:wrap;gap:6px}
+.dt-tabs button{border:0;background:transparent;border-radius:6px;padding:6px 10px;font-weight:600;font-size:13px;color:var(--fg);cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.dt-tabs button:hover{background:var(--bg)}
+.dt-tabs button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-text)}
+.dt-tabs .n{font-weight:500;color:var(--muted);font-variant-numeric:tabular-nums}
+.dt-q{flex:1 1 220px;min-width:0;max-width:340px;height:36px;border:0;border-radius:6px;background:var(--surface-2);padding:0 12px;font-size:13px}
+.dt-q:focus{outline:2px solid var(--accent);outline-offset:0}
+.dt-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+.dtbl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
+.dtbl th{position:sticky;top:0;background:var(--surface);color:var(--muted);font-weight:400;text-align:left;padding:10px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+.dtbl th.r,.dtbl td.r{text-align:right}
+.dtbl td{padding:10px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.dtbl tbody tr:last-child td{border-bottom:0}
+.dtbl td.m{font-variant-numeric:tabular-nums;white-space:nowrap}
+.dtbl .org{font-weight:500}
+.dtbl .sub{display:block;color:var(--muted);font-size:12px;margin-top:2px;font-variant-numeric:tabular-nums}
+.dtbl .fl{display:block;color:var(--warn);font-size:12px;margin-top:3px}
+.dtbl tr.debt td{background:var(--err-row)} .dtbl tr.debt td:first-child{box-shadow:inset 3px 0 0 var(--err-dot)}
+.dtbl tr.under td{background:var(--warn-row)} .dtbl tr.under td:first-child{box-shadow:inset 3px 0 0 var(--warn-fill)}
+.dtbl tr.over td{background:var(--info-row)} .dtbl tr.over td:first-child{box-shadow:inset 3px 0 0 var(--info)}
+.dtbl td.d-neg{color:var(--err);font-weight:600} .dtbl td.d-pos{color:var(--info);font-weight:600} .dtbl td.d-ok{color:var(--accent-text)}
+.st{display:inline-flex;align-items:center;gap:5px;border-radius:4px;font-size:12px;font-weight:500;padding:3px 8px;white-space:nowrap}
+.st.ok{background:var(--accent-100);color:var(--accent-800)}
+.st.not{background:var(--err-soft);color:var(--err-text)}
+.st.under{background:var(--warn-soft);color:var(--warn)}
+.st.over{background:var(--info-soft);color:var(--info)}
+.dt-more{align-self:flex-start}
+.dt-empty{padding:20px;text-align:center;color:var(--muted)}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--toast);color:var(--on-accent);padding:10px 16px;border-radius:6px;font-size:13px;z-index:30;max-width:calc(100% - 32px)}
 
 @media (max-width:900px){.zones{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -505,7 +537,7 @@ function makeCore(XLSX, ExcelJS) {
 
     const declAnn = new Map(), stats = { [S_OK]: 0, [S_OVER]: 0, [S_UNDER]: 0, [S_NOT]: 0 };
     let expectedTotal = 0, paidTotal = 0;
-    const debtors = [];
+    const debtors = [], details = [];
     for (const d of decl.rows) {
       if (!(d[sumKey] > 0)) continue;
       const plist = d.inn_key ? (counted.get(d.inn_key) || []) : [];
@@ -534,6 +566,8 @@ function makeCore(XLSX, ExcelJS) {
       });
       if (isChosen || !d.inn_key) {
         stats[status] += 1; expectedTotal += expected; paidTotal += psum;
+        details.push({ decl_num: d.decl_num, inn: d.inn, name: d.name, year_sum: d[sumKey], expected, paid: psum,
+                       diff: r2(psum - expected), count: plist.length, status, flags: flags.join(' · ') });
         if (status === S_NOT || status === S_UNDER) debtors.push({
           inn: d.inn, name: d.name, kpp: d.kpp, subject: d.subject, decl_status: d.status,
           decl_num: d.decl_num, year_sum: d[sumKey], expected, paid: psum, rest: r2(expected - psum), status,
@@ -574,7 +608,7 @@ function makeCore(XLSX, ExcelJS) {
     for (const list of counted.values()) for (const p of list) countedSum += p.amount;
     const skippedTop = [...skipped.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
     let skippedTotal = 0; for (const n of skipped.values()) skippedTotal += n;
-    return { declAnn, payAnn, debtors, skippedTop, stats: {
+    return { declAnn, payAnn, debtors, details, skippedTop, stats: {
       decl_count: chosen.size, paid_ok: stats[S_OK], overpaid: stats[S_OVER],
       underpaid: stats[S_UNDER], not_paid: stats[S_NOT],
       expected_total: r2(expectedTotal), paid_total: r2(paidTotal),
@@ -620,7 +654,7 @@ function makeCore(XLSX, ExcelJS) {
     const decl = loadDeclarations(declFile.buf);
     const out = new ExcelJS.Workbook();
     const summaryWs = out.addWorksheet('Сводка');
-    const allStats = {}, blocks = [];
+    const allStats = {}, allDetails = {}, blocks = [];
     const isYear = quarter === 'year';
     const expLabel = isYear ? 'Ожидание за год' : '1/4 расчётная';
     const declExtra = [expLabel, 'Σ платежей', 'Кол-во платежек', '№№ платёжек', 'КПП плательщика',
@@ -635,7 +669,7 @@ function makeCore(XLSX, ExcelJS) {
       if (!decl.table.cols[sumKey]) throw new UserError(`В файле деклараций нет колонки «Сумма платы ... ${cfg.marker}», нужной для сверки типа «${cfg.label}».`);
       const pays = loadPayments(pf.buf);
       const res = reconcileType(decl, pays, sumKey, quarter, year);
-      allStats[typeKey] = res.stats;
+      allStats[typeKey] = res.stats; allDetails[typeKey] = res.details;
 
       // Декларации — тип
       { const ws = out.addWorksheet(`Декларации — ${cfg.label}`), sz = sizer();
@@ -732,7 +766,7 @@ function makeCore(XLSX, ExcelJS) {
     ws.getColumn(1).width = 42; ws.getColumn(2).width = 20;
 
     const buffer = await out.xlsx.writeBuffer();
-    return { buffer, stats: allStats };
+    return { buffer, stats: allStats, details: allDetails };
   }
 
   return { build, classifyPeriod, UserError };
@@ -840,12 +874,12 @@ async function run() {
     const pf = {};
     for (const k of ['sbros', 'vybros']) if (state.files[k]) pf[k] = { name: state.files[k].name, buf: await fileBuf(state.files[k]) };
     const declFile = { name: state.files.decl.name, buf: await fileBuf(state.files.decl) };
-    const { buffer, stats } = await Core.build({ declFile, payFiles: pf, quarter: state.quarter, year });
+    const { buffer, stats, details } = await Core.build({ declFile, payFiles: pf, quarter: state.quarter, year });
     const d = new Date(), p = n => String(n).padStart(2, '0');
     let label = state.quarter === 'year' ? 'ГОД' : `КВ${state.quarter}`;
     if (year) label += ` ${year}`;
     const filename = `Сверка платежей ${label} — ${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}-${p(d.getMinutes())}.xlsx`;
-    state.result = { buffer, stats, filename, quarter: state.quarter, year };
+    state.result = { buffer, stats, details, filename, quarter: state.quarter, year };
     renderResult(state.result);
   } catch (e) {
     console.error(e);
@@ -857,6 +891,87 @@ async function run() {
 $('go').addEventListener('click', run);
 
 function kpi(cls, v, l) { return `<div class="kpi ${cls}"><div class="lbl"><i></i>${l}</div><div class="big">${fmtInt(v)}</div></div>`; }
+/* ---------- расшифровка по декларациям ---------- */
+const ST = {
+  '✅ Оплачено':   { k: 'ok',    row: '',      pill: 'ok',    text: 'Сходится' },
+  '💰 Переплата':  { k: 'over',  row: 'over',  pill: 'over',  text: 'Переплата' },
+  '⚠️ Недоплата':  { k: 'debt',  row: 'under', pill: 'under', text: 'Недоплата' },
+  '❌ Не оплачено': { k: 'debt', row: 'debt',  pill: 'not',   text: 'Не оплачено' },
+};
+const ORDER = { debt: 0, over: 1, ok: 2 };
+const PAGE = 100;
+let dtSeq = 0;
+function mountDetails(host, rows, isYear) {
+  if (!rows || !rows.length) return;
+  const id = 'dt' + (++dtSeq);
+  const sorted = rows.slice().sort((a, b) => {
+    const ka = ORDER[ST[a.status].k], kb = ORDER[ST[b.status].k];
+    if (ka !== kb) return ka - kb;
+    return ka === 0 ? a.diff - b.diff : ka === 1 ? b.diff - a.diff : 0; // долг — самый большой сверху
+  });
+  const cnt = { all: rows.length, debt: 0, over: 0, ok: 0 };
+  for (const r of rows) cnt[ST[r.status].k]++;
+  const box = document.createElement('div');
+  box.className = 'dt';
+  box.innerHTML = `
+    <div class="dt-h">
+      <h3>Расшифровка по декларациям</h3>
+      <div class="dt-tabs" role="group" aria-label="Фильтр">
+        <button type="button" data-f="all" aria-pressed="true">Все <span class="n">${fmtInt(cnt.all)}</span></button>
+        <button type="button" data-f="debt" aria-pressed="false">Долг <span class="n">${fmtInt(cnt.debt)}</span></button>
+        <button type="button" data-f="over" aria-pressed="false">Переплата <span class="n">${fmtInt(cnt.over)}</span></button>
+        <button type="button" data-f="ok" aria-pressed="false">Сходится <span class="n">${fmtInt(cnt.ok)}</span></button>
+      </div>
+      <input type="search" class="dt-q" id="${id}-q" placeholder="ИНН, название или № декларации" aria-label="Поиск по декларациям">
+    </div>
+    <div class="dt-wrap"><table class="dtbl">
+      <thead><tr><th>Декларация</th><th class="r">Сумма по декларации, год</th><th class="r">${isYear ? 'К оплате за год' : 'К оплате за квартал'}</th>
+        <th class="r">Поступило</th><th class="r">Разница</th><th>Статус</th></tr></thead>
+      <tbody></tbody></table></div>
+    <button type="button" class="btn dt-more" hidden></button>`;
+  host.appendChild(box);
+  const tbody = box.querySelector('tbody'), more = box.querySelector('.dt-more'), q = box.querySelector('.dt-q');
+  let filter = 'all', shown = PAGE;
+  function list() {
+    const s = q.value.trim().toLowerCase();
+    return sorted.filter(r => (filter === 'all' || ST[r.status].k === filter) &&
+      (!s || String(r.inn || '').includes(s) || String(r.name || '').toLowerCase().includes(s) || String(r.decl_num).includes(s)));
+  }
+  function diffCell(r) {
+    if (!r.count) return `<td class="m r d-neg">−${fmtMoney(r.expected)}</td>`;
+    if (Math.abs(r.diff) <= 1) return `<td class="m r d-ok">${r.diff === 0 ? '0,00 ₽' : (r.diff > 0 ? '+' : '−') + fmtMoney(Math.abs(r.diff))}</td>`;
+    return r.diff > 0 ? `<td class="m r d-pos">+${fmtMoney(r.diff)}</td>` : `<td class="m r d-neg">−${fmtMoney(-r.diff)}</td>`;
+  }
+  function draw() {
+    const L = list();
+    if (!L.length) { tbody.innerHTML = `<tr><td colspan="6" class="dt-empty">Ничего не найдено</td></tr>`; more.hidden = true; return; }
+    tbody.innerHTML = L.slice(0, shown).map(r => {
+      const st = ST[r.status];
+      return `<tr class="${st.row}">
+        <td><span class="org">${esc(r.name || '—')}</span>
+          <span class="sub">№ ${esc(r.decl_num || '—')} · ИНН ${esc(r.inn || 'не распознан')}${r.count ? ` · платёжек: ${r.count}` : ''}</span>
+          ${r.flags ? `<span class="fl">${esc(r.flags)}</span>` : ''}</td>
+        <td class="m r">${fmtMoney(r.year_sum)}</td>
+        <td class="m r">${fmtMoney(r.expected)}</td>
+        <td class="m r">${r.count ? fmtMoney(r.paid) : '—'}</td>
+        ${diffCell(r)}
+        <td><span class="st ${st.pill}">${st.k === 'ok' ? '✓ ' : ''}${st.text}</span></td></tr>`;
+    }).join('');
+    const rest = L.length - shown;
+    more.hidden = rest <= 0;
+    if (rest > 0) more.textContent = `Показать ещё ${fmtInt(Math.min(rest, PAGE))} из ${fmtInt(rest)}`;
+  }
+  box.querySelector('.dt-tabs').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    filter = b.dataset.f; shown = PAGE;
+    box.querySelectorAll('.dt-tabs button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    draw();
+  });
+  q.addEventListener('input', () => { shown = PAGE; draw(); });
+  more.addEventListener('click', () => { shown += PAGE; draw(); });
+  draw();
+}
+
 function renderResult(R) {
   $('res-name').textContent = R.filename;
   const types = Object.keys(R.stats);
@@ -883,6 +998,7 @@ function renderResult(R) {
       </div>
       ${warn ? `<div class="warns">${warn}</div>` : ''}`;
     blocks.appendChild(div);
+    mountDetails(div, R.details[t], R.quarter === 'year');
   }
   $('result').hidden = false;
   $('result').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
