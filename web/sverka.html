@@ -755,7 +755,7 @@ const $ = id => document.getElementById(id);
 // --- скачивание: внутри Claude — через окно сохранения, на обычном сайте — напрямую
 const inClaude = !!(window.claude && window.claude.use);
 let downloads = null;
-if (inClaude) window.claude.use('downloads').then(d => { downloads = d; }).catch(() => {});
+if (inClaude) { try { Promise.resolve(window.claude.use('downloads')).then(d => { downloads = d; }).catch(() => {}); } catch (e) { /* без сохранения */ } }
 
 let toastTimer;
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3200); }
@@ -812,6 +812,7 @@ function setupZone(key) {
   ['dragleave', 'drop'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.remove('drag'); }));
   zone.addEventListener('drop', e => accept(e.dataTransfer.files[0]));
   renders[key] = render;
+  render();
 }
 function syncDemo() { state.demo = Object.values(state.files).some(f => f && f.demo); $('demo-note').hidden = !state.demo; }
 
