@@ -84,6 +84,17 @@ def kpp_key(v):
     return s.lstrip('0')
 
 
+def _decl_num(v):
+    """Номер декларации числом. Раньше было rstrip('.0'), который
+    срезал все хвостовые нули: № 120 превращался в 12."""
+    if v is None:
+        return 0
+    s = str(v).strip()
+    if s.endswith('.0'):
+        s = s[:-2]
+    return int(s) if s.isdigit() else 0
+
+
 def as_float(v):
     return float(v) if isinstance(v, (int, float)) else 0.0
 
@@ -206,11 +217,7 @@ def load_declarations(path):
         name = ws.cell(r, cols['name']).value if cols['name'] else None
         if key is None and (name in (None, '', '-')):
             continue  # пустые строки и строка итогов
-        decl_num_raw = ws.cell(r, cols['decl_num']).value
-        try:
-            decl_num = int(str(decl_num_raw).strip().rstrip('.0') or 0)
-        except (ValueError, TypeError):
-            decl_num = 0
+        decl_num = _decl_num(ws.cell(r, cols['decl_num']).value)
         data.rows.append({
             'row': r,
             'inn_key': key,

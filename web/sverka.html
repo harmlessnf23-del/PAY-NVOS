@@ -1,0 +1,957 @@
+<title>Сверка платежей НВОС</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<style>
+/* Layout: шапка 64px + одна рабочая колонка; дизайн-система «Контроль Москвы · Экология» как в «Сверке НВОС».
+   Светлая тема намеренно (как у сервиса-образца): все цвета заданы явно. */
+:root{
+  color-scheme:light;
+  --bg:#F7FAFC; --surface:#FFFFFF; --surface-2:#EDF2F7;
+  --fg:#0B1F33; --fg-2:#2D3748; --muted:#718096;
+  --line:rgba(11,31,51,.16); --line-2:#CBD5E0;
+  --accent:#479C80; --accent-hover:#3A7F65; --accent-soft:#E3F3EF; --accent-text:#3A7F65;
+  --accent-100:#BBE1D6; --accent-800:#346E58;
+  --err:#C53030; --err-text:#9B2C2C; --err-soft:#FED7D7; --err-dot:#E53E3E;
+  --warn:#7A5600; --warn-soft:#FFF4CC; --warn-fill:#ECB000;
+  --info:#0D4CD3; --info-soft:#EBF4FF;
+  --tag:#E2E8F0; --tag-fg:#1A202C; --toast:#0B1F33; --on-accent:#FFFFFF;
+  --f-ui:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --r:8px; --r-s:6px;
+}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font-family:var(--f-ui);font-size:14px;line-height:1.4;color:var(--fg);background:var(--bg);-webkit-font-smoothing:antialiased}
+h1,h2{margin:0;text-wrap:balance}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+
+/* шапка */
+.mh{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;height:64px;background:var(--surface);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:24px;padding:0 24px}
+.wm{display:inline-flex;flex-direction:column;align-items:flex-start;line-height:1;user-select:none}
+.wm-t{display:inline-flex;align-items:center;font-size:21px;font-weight:800;letter-spacing:.01em;color:var(--fg)}
+.wm-o{display:inline-block;width:25px;height:25px;margin:0 0 0 1px;transform:translateY(1px)}
+.wm-o svg{width:100%;height:100%;display:block;overflow:visible}
+.wm-s{margin-top:3px;font-size:8.5px;font-weight:600;letter-spacing:.42em;color:var(--muted);padding-left:1px}
+.mh-crumb{font-size:16px;font-weight:600;color:var(--muted)}
+.mh-crumb::before{content:"/";margin-right:8px;color:var(--line-2)}
+.mh-sp{flex:1}
+.mh-priv{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+
+/* страница */
+.main{max-width:1180px;margin:0 auto;padding-block:24px 64px;padding-inline:32px;display:flex;flex-direction:column;gap:20px}
+.topbar{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.topbar .tt{min-width:0;flex:1 1 320px}
+.topbar h1{font-size:20px;font-weight:600}
+.topbar p{margin:4px 0 0;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.panel{padding:20px;display:flex;flex-direction:column;gap:20px}
+
+.period{display:flex;flex-wrap:wrap;align-items:center;gap:12px 24px}
+.fld{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.fld .lbl{font-size:13px;color:var(--muted)}
+.segm{display:inline-flex;flex-wrap:wrap;gap:8px}
+.segm button{border:0;background:transparent;border-radius:6px;padding:8px 12px;color:var(--fg);font-weight:600;font-size:14px;cursor:pointer;white-space:nowrap}
+.segm button:hover{background:var(--bg)}
+.segm button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-text)}
+.year-inp{width:110px;height:40px;border:0;border-radius:6px;background:var(--surface-2);padding:0 12px;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.year-inp:focus{outline:2px solid var(--accent);outline-offset:0}
+.year-inp::placeholder{font-weight:400;color:var(--muted)}
+.hint{color:var(--muted);font-size:13px}
+.period .hint{flex-basis:100%;margin-top:-4px}
+
+.zones{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.slot{padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.slot-h{display:flex;align-items:flex-start;gap:10px}
+.step{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:600;background:var(--surface-2);color:var(--muted);flex:none;margin-top:1px}
+.slot.filled .step{background:var(--accent);color:var(--on-accent)}
+.slot-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.slot-t b{font-size:16px;font-weight:600}
+.slot-t small{color:var(--muted);font-size:12.5px;line-height:1.35}
+.tag{display:inline-block;border-radius:4px;font-size:12px;font-weight:500;padding:3px 8px;line-height:1.4;white-space:nowrap;background:var(--tag);color:var(--tag-fg)}
+.tag.req{background:var(--err-soft);color:var(--err-text)}
+.tag.demo{background:var(--warn-soft);color:var(--warn)}
+.drop{flex:1;border:1.5px dashed var(--line-2);border-radius:8px;background:var(--bg);padding:20px 10px;text-align:center;color:var(--muted);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:110px;transition:background .15s,border-color .15s}
+.drop:hover,.slot.drag .drop{border-color:var(--accent);background:var(--accent-soft);color:var(--fg)}
+.drop svg{color:var(--accent)}
+.drop u{color:var(--accent-text);text-decoration-thickness:1px;text-underline-offset:3px}
+.drop small{font-size:12px}
+.slot input[type=file]{display:none}
+.file{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:6px;background:var(--accent-soft);min-width:0}
+.file svg{color:var(--accent);flex:none}
+.file .nm{flex:1;min-width:0;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file .sz{color:var(--muted);font-size:12.5px;flex:none}
+.file .rm{all:unset;cursor:pointer;width:24px;height:24px;border-radius:4px;display:grid;place-items:center;color:var(--muted);flex:none}
+.file .rm:hover{background:var(--surface);color:var(--err)}
+.file .rm:focus-visible{outline:2px solid var(--accent)}
+
+.actions{display:flex;align-items:center;gap:12px 16px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:16px}
+.actions .sp{flex:1}
+.btn{border:0;cursor:pointer;border-radius:6px;height:40px;padding:0 16px;font-weight:600;font-size:14px;display:inline-flex;align-items:center;gap:8px;text-decoration:none;transition:background .15s;background:transparent;color:var(--accent-text)}
+.btn:hover:not(:disabled){background:var(--accent-soft)}
+.btn.primary{background:var(--accent);color:var(--on-accent)}
+.btn.primary:hover:not(:disabled){background:var(--accent-hover)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.45);border-top-color:var(--on-accent);border-radius:50%;animation:rot .7s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:2s}}
+.error{padding:10px 12px;border-radius:6px;background:var(--err-soft);color:var(--err-text);font-size:14px}
+.demo-note{padding:10px 12px;border-radius:6px;background:var(--warn-soft);color:var(--warn);font-size:13px}
+
+/* результат */
+.result{display:flex;flex-direction:column;gap:20px}
+.dl-bar{padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.dl-bar>div{min-width:0}
+.dl-bar .fn{font-weight:600;font-size:15px;overflow-wrap:anywhere}
+.dl-bar .meta{font-size:13px;color:var(--muted);margin-top:3px}
+.tblock{padding:20px;display:flex;flex-direction:column;gap:16px}
+.tblock-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tblock-h h2{font-size:16px;font-weight:600}
+.tblock-h .hint{margin-left:auto}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kpi{padding:14px 16px;border:1px solid var(--line);border-radius:8px;min-width:0}
+.kpi .lbl{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:8px}
+.kpi .lbl i{width:8px;height:8px;border-radius:50%;flex:none}
+.kpi .big{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.25;margin-top:4px}
+.kpi.ok .lbl i{background:var(--accent)}
+.kpi.info .lbl i{background:var(--info)}
+.kpi.warn .lbl i{background:var(--warn-fill);border-radius:0;clip-path:polygon(50% 0,100% 100%,0 100%);width:10px;height:9px}
+.kpi.err .lbl i{background:var(--err-dot)}
+.kpi.err .big{color:var(--err)}
+.sums{display:flex;flex-wrap:wrap;gap:8px 28px;font-size:13px;color:var(--muted)}
+.sums b{color:var(--fg);font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.warns{display:flex;flex-direction:column;gap:6px}
+.warn-line{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--warn);background:var(--warn-soft);border-radius:6px;padding:8px 12px}
+.warn-line::before{content:"";width:9px;height:8px;background:var(--warn-fill);clip-path:polygon(50% 0,100% 100%,0 100%);flex:none}
+
+.rules{padding:16px 20px;font-size:13px;color:var(--fg-2)}
+.rules summary{cursor:pointer;font-weight:600;color:var(--fg)}
+.rules ul{margin:10px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px;max-width:80ch}
+.legend{display:inline-flex;gap:4px;align-items:center}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;border:1px solid var(--line)}
+
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--toast);color:var(--on-accent);padding:10px 16px;border-radius:6px;font-size:13px;z-index:30;max-width:calc(100% - 32px)}
+
+@media (max-width:900px){.zones{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){
+  .mh{gap:12px;padding:0 16px}
+  .mh-crumb,.mh-priv{display:none}
+  .main{padding-inline:16px;padding-block:16px 48px}
+  .tblock-h .hint{margin-left:0;flex-basis:100%}
+}
+</style>
+
+<header class="mh">
+  <div role="img" aria-label="НВОС · Платежи">
+    <span class="wm" aria-hidden="true">
+      <span class="wm-t">НВ<span class="wm-o"><svg viewBox="0 0 48 48"><circle cx="20" cy="20" r="12.5" fill="#E3F3EF"/><g fill="#0B1F33"><rect x="11.5" y="21.5" width="3.2" height="6"/><rect x="15.5" y="18.5" width="3.2" height="9"/><rect x="19.5" y="14.5" width="3.2" height="13"/><rect x="23.5" y="20" width="3.2" height="7.5"/><rect x="10" y="27.5" width="20" height="1.6"/></g><g fill="#A0AEC0"><circle cx="22.6" cy="12" r="1.8"/><circle cx="25.2" cy="9.4" r="1.3"/></g><line x1="30" y1="30" x2="41" y2="41" stroke="#346E58" stroke-width="5.5" stroke-linecap="round"/><circle cx="20" cy="20" r="13.5" fill="none" stroke="#479C80" stroke-width="4"/></svg></span>С</span>
+      <span class="wm-s">ПЛАТЕЖИ</span>
+    </span>
+  </div>
+  <span class="mh-crumb">Сверка платежей</span>
+  <span class="mh-sp"></span>
+  <span class="mh-priv"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Файлы обрабатываются в браузере</span>
+</header>
+
+<main class="main">
+  <div class="topbar">
+    <div class="tt">
+      <h1>Сверка платежей НВОС</h1>
+      <p>Декларации × платёжные поручения: контроль внесения авансовых платежей (1/4 годовой суммы за квартал)</p>
+    </div>
+    <button class="btn" id="btn-demo" type="button">Показать на примере</button>
+  </div>
+
+  <section class="card panel" aria-label="Параметры и файлы">
+    <div class="period">
+      <div class="fld">
+        <span class="lbl" id="lbl-q">Отчётный период</span>
+        <div class="segm" id="seg" role="group" aria-labelledby="lbl-q">
+          <button type="button" data-q="1" aria-pressed="true">1 квартал</button>
+          <button type="button" data-q="2" aria-pressed="false">2 квартал</button>
+          <button type="button" data-q="3" aria-pressed="false">3 квартал</button>
+          <button type="button" data-q="year" aria-pressed="false">Год</button>
+        </div>
+      </div>
+      <label class="fld" for="pay-year">
+        <span class="lbl">Год платежа</span>
+        <input type="number" id="pay-year" class="year-inp" min="2000" max="2100" placeholder="любой" title="Год периода платежа (КВ.0X.ГОД). Пусто — любой год">
+      </label>
+      <span class="hint" id="period-hint"></span>
+    </div>
+
+    <div class="zones">
+      <div class="card slot" id="zone-decl">
+        <div class="slot-h">
+          <span class="step">1</span>
+          <div class="slot-t"><b>Декларации</b><small>Выгрузка деклараций за год — колонки (040) и (080)</small></div>
+          <span class="tag req">обязательно</span>
+        </div>
+        <div class="body"></div>
+        <input type="file" accept=".xlsx,.xlsm" id="file-decl">
+      </div>
+      <div class="card slot" id="zone-sbros">
+        <div class="slot-h">
+          <span class="step">2</span>
+          <div class="slot-t"><b>Платежи — сбросы</b><small>Сверяются с «Сумма платы за сбросы, всего (080)»</small></div>
+          <span class="tag">080</span>
+        </div>
+        <div class="body"></div>
+        <input type="file" accept=".xlsx,.xlsm" id="file-sbros">
+      </div>
+      <div class="card slot" id="zone-vybros">
+        <div class="slot-h">
+          <span class="step">3</span>
+          <div class="slot-t"><b>Платежи — выбросы</b><small>Сверяются с «Сумма платы за выбросы всего (040)»</small></div>
+          <span class="tag">040</span>
+        </div>
+        <div class="body"></div>
+        <input type="file" accept=".xlsx,.xlsm" id="file-vybros">
+      </div>
+    </div>
+
+    <div class="demo-note" id="demo-note" hidden>Загружены примерные файлы с выдуманными организациями — чтобы посмотреть, как работает сверка. Уберите их и загрузите свои выгрузки.</div>
+
+    <div class="actions">
+      <button class="btn primary" id="go" type="button" disabled>Сформировать сверку</button>
+      <span class="hint" id="state-hint">Загрузите декларации и хотя бы один файл платежей</span>
+    </div>
+    <div class="error" id="error" role="alert" hidden></div>
+  </section>
+
+  <section class="result" id="result" hidden aria-live="polite">
+    <div class="card dl-bar">
+      <div>
+        <div class="fn" id="res-name"></div>
+        <div class="meta" id="res-meta"></div>
+      </div>
+      <button class="btn primary" id="dl" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+        Скачать Excel
+      </button>
+    </div>
+    <div id="blocks" class="result"></div>
+  </section>
+
+  <details class="card rules">
+    <summary>Как считается сверка</summary>
+    <ul>
+      <li>Декларация и платёж связываются по <b>ИНН</b> (без учёта ведущих нулей). Расхождение КПП — только пометка, платёж засчитывается.</li>
+      <li>Квартал: учитываются платежи с периодом <b>КВ.0X.год</b>; МС.* — с пометкой «проверить»; остальные периоды не учитываются, но видны на листе платежей серым.</li>
+      <li>Год: учитываются КВ.*, ГД.*, ПГ.* и ДОПЛ указанного года; МС.* — с пометкой.</li>
+      <li>Платёж без периода засчитывается с пометкой «период не указан». Если колонки периода в файле нет — учитываются все платежи.</li>
+      <li>Несколько деклараций на один ИНН: в сводке учитывается декларация с наибольшим номером, дубли помечены.</li>
+      <li>Допуск сходимости суммы ±1 ₽. Цвета в Excel:
+        <span class="legend"><i class="sw" style="background:#C6EFCE"></i>оплачено,</span>
+        <span class="legend"><i class="sw" style="background:#BDD7EE"></i>переплата,</span>
+        <span class="legend"><i class="sw" style="background:#FFEB9C"></i>недоплата,</span>
+        <span class="legend"><i class="sw" style="background:#FFC7CE"></i>не оплачено,</span>
+        <span class="legend"><i class="sw" style="background:#EDEDED"></i>не учтён по периоду.</span></li>
+    </ul>
+  </details>
+</main>
+<div class="toast" id="toast" hidden></div>
+
+<script id="core">
+/* =====================================================================
+   ЯДРО СВЕРКИ — перенос core.py один в один.
+   Чтение Excel: SheetJS (XLSX). Итоговая книга с заливкой: ExcelJS.
+   ===================================================================== */
+function makeCore(XLSX, ExcelJS) {
+  const TOLERANCE = 1.0;
+  const TYPES = {
+    sbros:  { label: 'сбросы',  title: 'Сбросы (080)',  marker: '(080)' },
+    vybros: { label: 'выбросы', title: 'Выбросы (040)', marker: '(040)' },
+  };
+  const fill = hex => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + hex } });
+  const GREEN = fill('C6EFCE'), BLUE = fill('BDD7EE'), YELLOW = fill('FFEB9C'), RED = fill('FFC7CE'), GRAY = fill('EDEDED');
+  const BOLD = { bold: true }, BOLD_BLUE = { bold: true, color: { argb: 'FF1F4E78' } };
+  const CENTER = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  const MONEY_FMT = '#,##0.00';
+  const S_OK = '✅ Оплачено', S_OVER = '💰 Переплата', S_UNDER = '⚠️ Недоплата', S_NOT = '❌ Не оплачено';
+
+  class UserError extends Error {}
+
+  // ---------- утилиты
+  const pyStr = v => (v instanceof Date ? v.toISOString() : String(v));
+  const r2 = x => Math.round(x * 100) / 100;
+  function normHeader(v) {
+    if (v === null || v === undefined) return '';
+    return pyStr(v).replace(/ё/g, 'е').replace(/Ё/g, 'Е').toLowerCase().split(/\s+/).filter(Boolean).join(' ');
+  }
+  function innNorm(v) {
+    if (v === null || v === undefined) return [null, null];
+    let s = pyStr(v).trim();
+    if (s.endsWith('.0')) s = s.slice(0, -2);
+    if (!/^\d+$/.test(s) || s.length < 8) return [null, null];
+    return [s.replace(/^0+/, '') || null, s];
+  }
+  function kppKey(v) {
+    if (v === null || v === undefined) return '';
+    let s = pyStr(v).trim();
+    if (s.endsWith('.0')) s = s.slice(0, -2);
+    if (!/^\d+$/.test(s)) return '';
+    return s.replace(/^0+/, '');
+  }
+  const isNum = v => typeof v === 'number' && Number.isFinite(v);
+  const asFloat = v => (isNum(v) ? v : 0);
+  function declNum(raw) {
+    if (raw === null || raw === undefined) return 0;
+    let s = pyStr(raw).trim();
+    if (s.endsWith('.0')) s = s.slice(0, -2);
+    return /^\d+$/.test(s) ? parseInt(s, 10) : 0;
+  }
+
+  // ---------- лист как сетка значений (1-based, как openpyxl)
+  function sheetGrid(ws) {
+    const rows = []; let maxRow = 0, maxCol = 0;
+    if (!ws) return { rows, maxRow, maxCol };
+    for (const addr in ws) {
+      if (addr[0] === '!') continue;
+      const c = ws[addr];
+      let v;
+      switch (c.t) {
+        case 'n': case 's': case 'b': case 'd': v = c.v; break;
+        case 'e': v = c.w || '#ERR'; break;
+        default: v = null;
+      }
+      if (v === undefined || v === null || v === '') { if (v !== '') continue; }
+      const { r, c: col } = XLSX.utils.decode_cell(addr);
+      (rows[r] || (rows[r] = []))[col] = { v, z: c.z };
+      if (r + 1 > maxRow) maxRow = r + 1;
+      if (col + 1 > maxCol) maxCol = col + 1;
+    }
+    return { rows, maxRow, maxCol };
+  }
+  const cellOf = (g, r, c) => (g.rows[r - 1] && g.rows[r - 1][c - 1]) || null;
+  const val = (g, r, c) => { const x = cellOf(g, r, c); return x ? x.v : null; };
+  const filled = v => v !== null && v !== undefined && v !== '';
+
+  function lastHeaderCol(g, hr) {
+    let last = 0;
+    for (let c = 1; c <= g.maxCol; c++) if (filled(val(g, hr, c))) last = c;
+    return last;
+  }
+  function rowHeaders(g, r) {
+    const m = new Map();
+    for (let c = 1; c <= g.maxCol; c++) { const v = val(g, r, c); if (filled(v)) m.set(normHeader(v), c); }
+    return m;
+  }
+  function findCol(headers, { contains = null, equals = null } = {}) {
+    for (const [h, c] of headers) {
+      if (equals && h === equals) return c;
+      if (contains && contains.every(s => h.includes(s))) return c;
+    }
+    return null;
+  }
+  const headerOf = (headers, col) => { for (const [h, c] of headers) if (c === col) return h; return ''; };
+
+  function findPaymentsTable(wb) {
+    for (const sn of wb.SheetNames) {
+      const g = sheetGrid(wb.Sheets[sn]);
+      for (let r = 1; r <= Math.min(g.maxRow, 15); r++) {
+        const headers = rowHeaders(g, r);
+        if (!headers.size) continue;
+        const colSum = findCol(headers, { contains: ['сумма', 'поручени'] });
+        const colInn = findCol(headers, { contains: ['инн'] });
+        if (!(colSum && colInn)) continue;
+        return { g, sheet: sn, headerRow: r, lastCol: lastHeaderCol(g, r), cols: {
+          inn: colInn, amount: colSum,
+          kpp: findCol(headers, { contains: ['кпп'] }),
+          period: findCol(headers, { contains: ['период'] }),
+          kbk: findCol(headers, { equals: 'кбк' }),
+          num: findCol(headers, { equals: 'номер' }),
+          date: findCol(headers, { equals: 'дата' }),
+          desc: findCol(headers, { equals: 'описание' }),
+        } };
+      }
+    }
+    return null;
+  }
+  function findDeclTable(wb) {
+    for (const sn of wb.SheetNames) {
+      const g = sheetGrid(wb.Sheets[sn]);
+      for (let r = 1; r <= Math.min(g.maxRow, 15); r++) {
+        const headers = rowHeaders(g, r);
+        if (!headers.size) continue;
+        const colDeclNum = findCol(headers, { contains: ['номер декларации'] });
+        const colInn = findCol(headers, { equals: 'инн' });
+        let col040 = findCol(headers, { contains: ['(040)'] });
+        let col080 = findCol(headers, { contains: ['(080)'] });
+        // отбрасываем врезанные колонки «1/4» — нужна именно «сумма платы»
+        if (col040 && !headerOf(headers, col040).includes('сумма платы')) col040 = null;
+        if (col080 && !headerOf(headers, col080).includes('сумма платы')) col080 = null;
+        if (!(colDeclNum && colInn && (col040 || col080))) continue;
+        return { g, sheet: sn, headerRow: r, lastCol: lastHeaderCol(g, r), cols: {
+          decl_num: colDeclNum, inn: colInn,
+          kpp: findCol(headers, { equals: 'кпп' }),
+          name: findCol(headers, { contains: ['название организации'] }),
+          subject: findCol(headers, { contains: ['субъект'] }),
+          status: findCol(headers, { equals: 'статус' }),
+          sum_vybros: col040, sum_sbros: col080,
+        } };
+      }
+    }
+    return null;
+  }
+
+  function readBook(buf) {
+    try { return XLSX.read(buf, { type: 'array', cellNF: true, cellStyles: false }); }
+    catch (e) { throw new UserError('Не удалось прочитать файл как Excel (.xlsx). Проверьте, что файл не повреждён и не защищён паролем.'); }
+  }
+
+  // ---------- загрузка
+  function loadDeclarations(buf) {
+    const table = findDeclTable(readBook(buf));
+    if (!table) throw new UserError('В файле деклараций не найден лист с колонками «Номер декларации», «ИНН» и «Сумма платы ... (040)/(080)».');
+    const { g, cols } = table;
+    const rows = [];
+    for (let r = table.headerRow + 1; r <= g.maxRow; r++) {
+      const [key, disp] = innNorm(val(g, r, cols.inn));
+      const name = cols.name ? val(g, r, cols.name) : null;
+      if (key === null && (name === null || name === '' || name === '-')) continue; // пустые строки и итоги
+      rows.push({
+        row: r, inn_key: key, inn: disp,
+        kpp: cols.kpp ? kppKey(val(g, r, cols.kpp)) : '',
+        name, subject: cols.subject ? val(g, r, cols.subject) : null,
+        status: cols.status ? val(g, r, cols.status) : null,
+        decl_num: declNum(val(g, r, cols.decl_num)),
+        sum_vybros: cols.sum_vybros ? asFloat(val(g, r, cols.sum_vybros)) : 0,
+        sum_sbros: cols.sum_sbros ? asFloat(val(g, r, cols.sum_sbros)) : 0,
+      });
+    }
+    return { table, rows };
+  }
+  function loadPayments(buf) {
+    const table = findPaymentsTable(readBook(buf));
+    if (!table) throw new UserError('В файле платежей не найден лист с колонками «ИНН» и «Сумма платёжного поручения».');
+    const { g, cols } = table;
+    const cell = (r, k) => (cols[k] ? val(g, r, cols[k]) : null);
+    const rows = [];
+    for (let r = table.headerRow + 1; r <= g.maxRow; r++) {
+      const amount = cell(r, 'amount');
+      const [key, disp] = innNorm(cell(r, 'inn'));
+      if (!isNum(amount)) continue;
+      let period;
+      if (!cols.period) period = null;               // колонки периода нет
+      else { const v = cell(r, 'period'); period = v !== null ? pyStr(v).trim() : ''; }
+      rows.push({ row: r, inn_key: key, inn: disp, kpp: kppKey(cell(r, 'kpp')), amount,
+                  period, num: cell(r, 'num'), date: cell(r, 'date'), desc: cell(r, 'desc') });
+    }
+    return { table, rows };
+  }
+
+  // ---------- сверка
+  function periodYearOk(period, year) {
+    if (year === null) return true;
+    return (period.match(/\d{4}/g) || []).includes(String(year));
+  }
+  function rangeYearOk(period, year) {
+    if (year === null) return false;
+    const m = period.match(/\d{2,4}\s*-\s*(\d{2})$/);
+    return !!m && 2000 + parseInt(m[1], 10) === year;
+  }
+  function classifyPeriod(period, quarter, year) {
+    if (period === null) return ['ok', ''];
+    if (period === '') return ['flag', 'период не указан — проверить'];
+    const p = period.replace(/,/g, '.');
+    if (quarter === 'year') {
+      if (['КВ.', 'ГД.', 'ПГ.', 'ДОПЛ'].some(s => p.startsWith(s))) {
+        if (periodYearOk(p, year)) return ['ok', ''];
+        if (rangeYearOk(p, year)) return ['flag', `период ${period} — диапазон лет, проверить`];
+        return ['skip', `период ${period} — другой год`];
+      }
+      if (p.startsWith('МС.') && periodYearOk(p, year)) return ['flag', `период ${period} — проверить`];
+      return ['skip', `период ${period} — не учтён`];
+    }
+    if (p.startsWith(`КВ.0${quarter}.`) || p.startsWith(`КВ.${quarter}.`)) {
+      if (periodYearOk(p, year)) return ['ok', ''];
+      return ['skip', `период ${period} — другой год`];
+    }
+    if (p.startsWith('МС.') && periodYearOk(p, year)) return ['flag', `период ${period} — проверить`];
+    return ['skip', `период ${period} — не учтён`];
+  }
+
+  function reconcileType(decl, pays, sumKey, quarter, year) {
+    const divisor = quarter === 'year' ? 1 : 4;
+    const counted = new Map(), payNotes = new Map(), skipped = new Map();
+    for (const p of pays.rows) {
+      const [verdict, note] = classifyPeriod(p.period, quarter, year);
+      if (verdict === 'skip') {
+        payNotes.set(p.row, [false, note]);
+        skipped.set(p.period, (skipped.get(p.period) || 0) + 1);
+        continue;
+      }
+      payNotes.set(p.row, [true, note]);
+      if (p.inn_key) { if (!counted.has(p.inn_key)) counted.set(p.inn_key, []); counted.get(p.inn_key).push(p); }
+    }
+    // дедупликация деклараций по ИНН: актуальная — с наибольшим номером
+    const byInn = new Map();
+    for (const d of decl.rows) if (d.inn_key && d[sumKey] > 0) {
+      if (!byInn.has(d.inn_key)) byInn.set(d.inn_key, []); byInn.get(d.inn_key).push(d);
+    }
+    const chosen = new Map();
+    for (const [inn, list] of byInn) {
+      let best = list[0];
+      for (const d of list) if (d.decl_num > best.decl_num || (d.decl_num === best.decl_num && d.row > best.row)) best = d;
+      chosen.set(inn, best);
+    }
+    const declKpps = new Map();
+    for (const d of decl.rows) if (d.inn_key && d.kpp) {
+      if (!declKpps.has(d.inn_key)) declKpps.set(d.inn_key, new Set()); declKpps.get(d.inn_key).add(d.kpp);
+    }
+
+    const declAnn = new Map(), stats = { [S_OK]: 0, [S_OVER]: 0, [S_UNDER]: 0, [S_NOT]: 0 };
+    let expectedTotal = 0, paidTotal = 0;
+    const debtors = [];
+    for (const d of decl.rows) {
+      if (!(d[sumKey] > 0)) continue;
+      const plist = d.inn_key ? (counted.get(d.inn_key) || []) : [];
+      const expected = r2(d[sumKey] / divisor);
+      const psum = r2(plist.reduce((a, p) => a + p.amount, 0));
+      const delta = r2(psum - expected);
+      const flags = [];
+      const dupN = d.inn_key ? byInn.get(d.inn_key).length : 0;
+      const isChosen = d.inn_key && chosen.get(d.inn_key) === d;
+      if (dupN > 1) flags.push(`по ИНН ${dupN} декларации` + (isChosen ? '' : ' — дубль, в сводке не учтена'));
+      if (plist.some(p => (p.period || '').startsWith('МС.'))) flags.push('есть платежи с периодом МС — проверить');
+      if (plist.some(p => p.period === '')) flags.push('есть платежи без указания периода — проверить');
+      const payKpps = new Set(plist.filter(p => p.kpp).map(p => p.kpp));
+      if (plist.length && d.kpp && !payKpps.has(d.kpp)) flags.push('КПП платежа не совпадает с КПП декларации');
+      let status, f;
+      if (!plist.length) [status, f] = [S_NOT, RED];
+      else if (Math.abs(delta) <= TOLERANCE) [status, f] = [S_OK, GREEN];
+      else if (delta > TOLERANCE) [status, f] = [S_OVER, BLUE];
+      else [status, f] = [S_UNDER, YELLOW];
+      declAnn.set(d.row, {
+        expected, paid: psum, count: plist.length,
+        nums: plist.filter(p => p.num !== null && p.num !== undefined).map(p => pyStr(p.num)).join(', '),
+        kpps: [...payKpps].sort().join(', '),
+        periods: [...new Set(plist.filter(p => p.period).map(p => p.period))].sort().join(', '),
+        delta: plist.length ? delta : null, status, fill: f, flags: flags.join(' | '),
+      });
+      if (isChosen || !d.inn_key) {
+        stats[status] += 1; expectedTotal += expected; paidTotal += psum;
+        if (status === S_NOT || status === S_UNDER) debtors.push({
+          inn: d.inn, name: d.name, kpp: d.kpp, subject: d.subject, decl_status: d.status,
+          decl_num: d.decl_num, year_sum: d[sumKey], expected, paid: psum, rest: r2(expected - psum), status,
+        });
+      }
+    }
+    debtors.sort((a, b) => b.rest - a.rest);
+
+    const allDeclInns = new Set(decl.rows.filter(d => d.inn_key).map(d => d.inn_key));
+    const payAnn = new Map();
+    let noDeclCount = 0, noDeclSum = 0;
+    for (const p of pays.rows) {
+      const [isCounted, periodNote] = payNotes.get(p.row);
+      const notes = periodNote ? [periodNote] : [];
+      let d = p.inn_key ? (chosen.get(p.inn_key) || null) : null;
+      let found, f;
+      if (p.inn_key === null) { found = 'нет'; f = RED; notes.push('ИНН не распознан'); }
+      else if (d) {
+        found = 'да';
+        const kppOk = p.kpp && (declKpps.get(p.inn_key) || new Set()).has(p.kpp);
+        if (!kppOk) notes.push(`КПП декл: ${d.kpp}`);
+        f = kppOk ? GREEN : BLUE;
+      } else if (allDeclInns.has(p.inn_key)) {
+        found = 'да'; f = YELLOW; notes.push('в декларации сумма по этому виду = 0');
+        d = decl.rows.find(x => x.inn_key === p.inn_key);
+      } else {
+        found = 'нет'; f = RED; notes.push('ИНН не найден в декларациях');
+        if (isCounted) { noDeclCount += 1; noDeclSum += p.amount; }
+      }
+      if (!isCounted) f = GRAY;
+      payAnn.set(p.row, {
+        found, name: d ? d.name : null, kpp: d ? d.kpp : null,
+        year_sum: d ? d[sumKey] : null, expected: d ? r2(d[sumKey] / divisor) : null,
+        counted: isCounted ? 'да' : 'нет', notes: notes.filter(Boolean).join(' | '), fill: f,
+      });
+    }
+    let countedSum = 0;
+    for (const list of counted.values()) for (const p of list) countedSum += p.amount;
+    const skippedTop = [...skipped.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+    let skippedTotal = 0; for (const n of skipped.values()) skippedTotal += n;
+    return { declAnn, payAnn, debtors, skippedTop, stats: {
+      decl_count: chosen.size, paid_ok: stats[S_OK], overpaid: stats[S_OVER],
+      underpaid: stats[S_UNDER], not_paid: stats[S_NOT],
+      expected_total: r2(expectedTotal), paid_total: r2(paidTotal),
+      payments_counted_sum: r2(countedSum), payments_total: pays.rows.length,
+      payments_skipped: skippedTotal, no_decl_count: noDeclCount, no_decl_sum: r2(noDeclSum),
+      sheet: pays.table.sheet,
+    } };
+  }
+
+  // ---------- сборка книги
+  function colLetter(n) { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
+  function sizer() {
+    const w = new Map();
+    return {
+      see(r, c, v) {
+        if (r > 400 || v === null || v === undefined) return;
+        const ln = Math.max(0, ...pyStr(v).split(/\r?\n/).map(l => l.length));
+        if (ln > (w.get(c) || 0)) w.set(c, ln);
+      },
+      apply(ws) { for (const [c, n] of w) ws.getColumn(c).width = Math.min(n + 2, 55); },
+    };
+  }
+  function put(ws, sz, r, c, v) {
+    const cell = ws.getCell(r, c);
+    if (v !== null && v !== undefined && v !== '') cell.value = v;
+    sz.see(r, c, v);
+    return cell;
+  }
+  function copyHeader(src, ws, sz, lastCol, extra) {
+    for (let c = 1; c <= lastCol; c++) put(ws, sz, 1, c, val(src.g, src.headerRow, c)).font = BOLD;
+    extra.forEach((h, i) => { const cell = put(ws, sz, 1, lastCol + 1 + i, h); cell.font = BOLD_BLUE; cell.alignment = CENTER; });
+  }
+  function copyRow(src, srcR, ws, sz, dstR, lastCol) {
+    for (let c = 1; c <= lastCol; c++) {
+      const x = cellOf(src.g, srcR, c);
+      if (!x) continue;
+      const cell = put(ws, sz, dstR, c, x.v);
+      if (x.z && x.z !== 'General' && typeof x.v === 'number') cell.numFmt = x.z;
+    }
+  }
+
+  async function build({ declFile, payFiles, quarter, year }) {
+    const decl = loadDeclarations(declFile.buf);
+    const out = new ExcelJS.Workbook();
+    const summaryWs = out.addWorksheet('Сводка');
+    const allStats = {}, blocks = [];
+    const isYear = quarter === 'year';
+    const expLabel = isYear ? 'Ожидание за год' : '1/4 расчётная';
+    const declExtra = [expLabel, 'Σ платежей', 'Кол-во платежек', '№№ платёжек', 'КПП плательщика',
+                       'Периоды платежей', 'Дельта (Σ − ожидание)', 'Статус сверки', 'Флаги'];
+    const payExtra = ['Декларация найдена', 'Название по декларации', 'КПП декл', 'Годовая сумма (декл)',
+                      expLabel, 'Учтён в сверке', 'Заметки'];
+
+    for (const [typeKey, cfg] of Object.entries(TYPES)) {
+      const pf = payFiles[typeKey];
+      if (!pf) continue;
+      const sumKey = 'sum_' + typeKey;
+      if (!decl.table.cols[sumKey]) throw new UserError(`В файле деклараций нет колонки «Сумма платы ... ${cfg.marker}», нужной для сверки типа «${cfg.label}».`);
+      const pays = loadPayments(pf.buf);
+      const res = reconcileType(decl, pays, sumKey, quarter, year);
+      allStats[typeKey] = res.stats;
+
+      // Декларации — тип
+      { const ws = out.addWorksheet(`Декларации — ${cfg.label}`), sz = sizer();
+        const last = decl.table.lastCol, total = last + declExtra.length;
+        copyHeader(decl.table, ws, sz, last, declExtra);
+        const money = new Set([last + 1, last + 2, last + 7]);
+        let r = 2;
+        for (const d of decl.rows) {
+          const a = res.declAnn.get(d.row); if (!a) continue;
+          copyRow(decl.table, d.row, ws, sz, r, last);
+          [a.expected, a.paid, a.count, a.nums, a.kpps, a.periods, a.delta, a.status, a.flags].forEach((v, i) => {
+            const cell = put(ws, sz, r, last + 1 + i, v); if (money.has(last + 1 + i)) cell.numFmt = MONEY_FMT;
+          });
+          for (let c = 1; c <= total; c++) ws.getCell(r, c).fill = a.fill;
+          r++;
+        }
+        ws.views = [{ state: 'frozen', ySplit: 1 }];
+        ws.autoFilter = `A1:${colLetter(total)}${r - 1}`;
+        sz.apply(ws); }
+
+      // Платежи — тип
+      { const ws = out.addWorksheet(`Платежи — ${cfg.label}`), sz = sizer();
+        const last = pays.table.lastCol, total = last + payExtra.length;
+        copyHeader(pays.table, ws, sz, last, payExtra);
+        const money = new Set([last + 4, last + 5]);
+        let r = 2;
+        for (const p of pays.rows) {
+          const a = res.payAnn.get(p.row);
+          copyRow(pays.table, p.row, ws, sz, r, last);
+          [a.found, a.name, a.kpp, a.year_sum, a.expected, a.counted, a.notes].forEach((v, i) => {
+            const cell = put(ws, sz, r, last + 1 + i, v); if (money.has(last + 1 + i)) cell.numFmt = MONEY_FMT;
+          });
+          for (let c = 1; c <= total; c++) ws.getCell(r, c).fill = a.fill;
+          r++;
+        }
+        ws.views = [{ state: 'frozen', ySplit: 1 }];
+        ws.autoFilter = `A1:${colLetter(total)}${r - 1}`;
+        sz.apply(ws); }
+
+      // Должники — тип
+      if (res.debtors.length) {
+        const ws = out.addWorksheet(`Должники — ${cfg.label}`), sz = sizer();
+        const headers = ['ИНН', 'Название', 'КПП', 'Субъект РФ', 'Статус декларации', '№ декларации', 'Годовая сумма, ₽',
+                         isYear ? 'Ожидание за год, ₽' : 'Ожидание 1/4, ₽', 'Оплачено, ₽', 'Остаток, ₽', 'Статус сверки'];
+        headers.forEach((h, i) => { const cell = put(ws, sz, 1, i + 1, h); cell.font = BOLD_BLUE; cell.alignment = CENTER; });
+        res.debtors.forEach((d, k) => {
+          const r = k + 2, f = d.status === S_NOT ? RED : YELLOW;
+          [d.inn, d.name, d.kpp, d.subject, d.decl_status, d.decl_num, d.year_sum, d.expected, d.paid, d.rest, d.status].forEach((v, i) => {
+            const cell = put(ws, sz, r, i + 1, v);
+            if (i + 1 >= 7 && i + 1 <= 10) cell.numFmt = MONEY_FMT;
+            cell.fill = f;
+          });
+        });
+        ws.views = [{ state: 'frozen', ySplit: 1 }];
+        ws.autoFilter = `A1:K${res.debtors.length + 1}`;
+        sz.apply(ws);
+      }
+      blocks.push({ title: cfg.title, st: res.stats, sheet: pays.table.sheet, fname: pf.name, skipped: res.skippedTop });
+    }
+
+    // Сводка
+    const ws = summaryWs;
+    let periodTitle = isYear ? 'ГОД' : `${quarter} КВАРТАЛ`;
+    periodTitle += year ? ` ${year}` : ' (год не задан — любые)';
+    const t = ws.getCell(1, 1); t.value = `СВЕРКА ПЛАТЕЖЕЙ — ${periodTitle}`; t.font = { bold: true, size: 14, color: { argb: 'FF1F4E78' } };
+    ws.getCell(2, 1).value = `Файл деклараций: ${declFile.name} (лист «${decl.table.sheet}», деклараций: ${decl.rows.length})`;
+    let r = 4;
+    for (const b of blocks) {
+      const h = ws.getCell(r, 1); h.value = `— ${b.title} —`; h.font = { bold: true, size: 12 }; r++;
+      ws.getCell(r, 1).value = `Файл платежей: ${b.fname} (лист «${b.sheet}»)`; r++;
+      const st = b.st;
+      const rows = [
+        ['Деклараций с суммой > 0 (уник. ИНН)', st.decl_count, null, false],
+        [S_OK, st.paid_ok, GREEN, false], [S_OVER, st.overpaid, BLUE, false],
+        [S_UNDER, st.underpaid, YELLOW, false], [S_NOT, st.not_paid, RED, false],
+        [isYear ? 'Ожидаемая Σ за год, ₽' : 'Ожидаемая Σ за квартал (1/4), ₽', st.expected_total, null, true],
+        ['Поступило по декларациям, ₽', st.paid_total, null, true],
+        ['Учтено платежей всего, ₽', st.payments_counted_sum, null, true],
+        ['Платежей в файле, шт', st.payments_total, null, false],
+        ['Не учтено по периоду, шт', st.payments_skipped, null, false],
+        ['Платежи без декларации, шт', st.no_decl_count, st.no_decl_count ? RED : null, false],
+        ['Платежи без декларации, ₽', st.no_decl_sum, null, true],
+      ];
+      for (const [label, v, f, money] of rows) {
+        const ca = ws.getCell(r, 1), cb = ws.getCell(r, 2);
+        ca.value = label; cb.value = v;
+        if (money) cb.numFmt = MONEY_FMT;
+        if (f) { ca.fill = f; cb.fill = f; }
+        r++;
+      }
+      if (b.skipped.length) { ws.getCell(r, 1).value = 'Неучтённые периоды: ' + b.skipped.map(([k, n]) => `${k || '(пусто)'}: ${n}`).join(', '); r++; }
+      r++;
+    }
+    ws.getColumn(1).width = 42; ws.getColumn(2).width = 20;
+
+    const buffer = await out.xlsx.writeBuffer();
+    return { buffer, stats: allStats };
+  }
+
+  return { build, classifyPeriod, UserError };
+}
+</script>
+
+<script>
+/* =====================================================================
+   ИНТЕРФЕЙС
+   ===================================================================== */
+const Core = makeCore(window.XLSX, window.ExcelJS);
+const TYPE_META = { sbros: { title: 'Сбросы', code: '080' }, vybros: { title: 'Выбросы', code: '040' } };
+const ICON_UP = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>';
+const ICON_FILE = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>';
+const ICON_X = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+const state = { quarter: 1, files: { decl: null, sbros: null, vybros: null }, result: null, demo: false };
+const $ = id => document.getElementById(id);
+
+// --- скачивание: внутри Claude — через окно сохранения, на обычном сайте — напрямую
+const inClaude = !!(window.claude && window.claude.use);
+let downloads = null;
+if (inClaude) window.claude.use('downloads').then(d => { downloads = d; }).catch(() => {});
+
+let toastTimer;
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3200); }
+
+// --- период
+const HINT_Q = 'Ожидание = 1/4 годовой суммы; учитываются платежи с периодом КВ.0X, МС.* — с пометкой «проверить»';
+const HINT_Y = 'Ожидание = вся годовая сумма; учитываются платежи с периодами КВ.*, ГД.*, ПГ.*, ДОПЛ, МС.* — с пометкой «проверить»';
+$('period-hint').textContent = HINT_Q;
+$('pay-year').value = new Date().getFullYear();
+$('seg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  state.quarter = b.dataset.q === 'year' ? 'year' : Number(b.dataset.q);
+  $('seg').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  $('period-hint').textContent = state.quarter === 'year' ? HINT_Y : HINT_Q;
+});
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtSize = b => (b > 1048576 ? (b / 1048576).toFixed(1) + ' МБ' : b > 1024 ? Math.round(b / 1024) + ' КБ' : b + ' Б');
+const fmtMoney = v => v.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
+const fmtInt = v => v.toLocaleString('ru-RU');
+
+// --- зоны загрузки
+const renders = {};
+function setupZone(key) {
+  const zone = $('zone-' + key), input = $('file-' + key), body = zone.querySelector('.body');
+  function render() {
+    const f = state.files[key];
+    zone.classList.toggle('filled', !!f);
+    if (f) {
+      body.innerHTML = `<div class="file">${ICON_FILE}<span class="nm" title="${esc(f.name)}">${esc(f.name)}</span>
+        ${f.demo ? '<span class="tag demo">пример</span>' : `<span class="sz">${fmtSize(f.size)}</span>`}
+        <button type="button" class="rm" aria-label="Убрать файл">${ICON_X}</button></div>`;
+      body.querySelector('.rm').addEventListener('click', ev => {
+        ev.stopPropagation(); state.files[key] = null; input.value = ''; render(); syncDemo();
+      });
+    } else {
+      body.innerHTML = `<div class="drop" role="button" tabindex="0" aria-label="Выбрать файл">${ICON_UP}
+        <span>Перетащите файл или <u>выберите</u></span><small>Excel · .xlsx</small></div>`;
+      const drop = body.querySelector('.drop');
+      drop.addEventListener('click', () => input.click());
+      drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
+    }
+    updateGo();
+  }
+  function accept(f) {
+    if (!f) return;
+    if (!/\.(xlsx|xlsm)$/i.test(f.name)) { showError('Нужен файл Excel (.xlsx или .xlsm).'); return; }
+    hideError();
+    state.files[key] = { name: f.name, size: f.size, file: f };
+    render(); syncDemo();
+  }
+  input.addEventListener('change', () => accept(input.files[0]));
+  ['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.add('drag'); }));
+  ['dragleave', 'drop'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.remove('drag'); }));
+  zone.addEventListener('drop', e => accept(e.dataTransfer.files[0]));
+  renders[key] = render;
+}
+function syncDemo() { state.demo = Object.values(state.files).some(f => f && f.demo); $('demo-note').hidden = !state.demo; }
+
+function updateGo() {
+  const ok = state.files.decl && (state.files.sbros || state.files.vybros);
+  $('go').disabled = !ok;
+  $('state-hint').textContent = ok ? 'Готово к запуску' : 'Загрузите декларации и хотя бы один файл платежей';
+}
+['decl', 'sbros', 'vybros'].forEach(setupZone);
+
+function showError(msg) { $('error').textContent = msg; $('error').hidden = false; }
+function hideError() { $('error').hidden = true; }
+
+// --- запуск
+async function fileBuf(f) { return f.buf || await f.file.arrayBuffer(); }
+async function run() {
+  hideError(); $('result').hidden = true;
+  const go = $('go'); go.disabled = true; go.innerHTML = '<span class="spin"></span> Обработка…';
+  await new Promise(r => setTimeout(r, 40));
+  try {
+    if (!window.XLSX || !window.ExcelJS) throw new Core.UserError('Не загрузились библиотеки для работы с Excel. Проверьте интернет и обновите страницу.');
+    const yRaw = $('pay-year').value.trim();
+    let year = null;
+    if (yRaw) { const y = parseInt(yRaw, 10); if (y >= 2000 && y <= 2100) year = y; }
+    const pf = {};
+    for (const k of ['sbros', 'vybros']) if (state.files[k]) pf[k] = { name: state.files[k].name, buf: await fileBuf(state.files[k]) };
+    const declFile = { name: state.files.decl.name, buf: await fileBuf(state.files.decl) };
+    const { buffer, stats } = await Core.build({ declFile, payFiles: pf, quarter: state.quarter, year });
+    const d = new Date(), p = n => String(n).padStart(2, '0');
+    let label = state.quarter === 'year' ? 'ГОД' : `КВ${state.quarter}`;
+    if (year) label += ` ${year}`;
+    const filename = `Сверка платежей ${label} — ${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}-${p(d.getMinutes())}.xlsx`;
+    state.result = { buffer, stats, filename, quarter: state.quarter, year };
+    renderResult(state.result);
+  } catch (e) {
+    console.error(e);
+    showError(e instanceof Core.UserError ? e.message : 'Не удалось обработать файлы: ' + (e && e.message || e));
+  } finally {
+    go.innerHTML = 'Сформировать сверку'; updateGo();
+  }
+}
+$('go').addEventListener('click', run);
+
+function kpi(cls, v, l) { return `<div class="kpi ${cls}"><div class="lbl"><i></i>${l}</div><div class="big">${fmtInt(v)}</div></div>`; }
+function renderResult(R) {
+  $('res-name').textContent = R.filename;
+  const types = Object.keys(R.stats);
+  let pl = R.quarter === 'year' ? 'Год' : `Квартал ${R.quarter}`;
+  pl += R.year ? ` · ${R.year}` : ' · любой год';
+  $('res-meta').textContent = `${pl} · типов сверки: ${types.length}${state.demo ? ' · пример' : ''}`;
+  const blocks = $('blocks'); blocks.innerHTML = '';
+  for (const t of ['sbros', 'vybros']) {
+    const st = R.stats[t]; if (!st) continue;
+    const m = TYPE_META[t];
+    let warn = '';
+    if (st.payments_skipped) warn += `<div class="warn-line">Не учтено по периоду: ${fmtInt(st.payments_skipped)} платёжек</div>`;
+    if (st.no_decl_count) warn += `<div class="warn-line">Платежи без декларации: ${fmtInt(st.no_decl_count)} шт. на ${fmtMoney(st.no_decl_sum)}</div>`;
+    const div = document.createElement('div');
+    div.className = 'card tblock';
+    div.innerHTML = `
+      <div class="tblock-h"><h2>${m.title}</h2><span class="tag">строка ${m.code}</span>
+        <span class="hint">Деклараций: <b class="num">${fmtInt(st.decl_count)}</b> · лист «${esc(st.sheet)}»</span></div>
+      <div class="kpis">${kpi('ok', st.paid_ok, 'Оплачено')}${kpi('info', st.overpaid, 'Переплата')}${kpi('warn', st.underpaid, 'Недоплата')}${kpi('err', st.not_paid, 'Не оплачено')}</div>
+      <div class="sums">
+        <span>${R.quarter === 'year' ? 'Ожидалось за год' : 'Ожидалось за квартал'}: <b>${fmtMoney(st.expected_total)}</b></span>
+        <span>Поступило: <b>${fmtMoney(st.paid_total)}</b></span>
+        <span>Платёжек в файле: <b>${fmtInt(st.payments_total)}</b></span>
+      </div>
+      ${warn ? `<div class="warns">${warn}</div>` : ''}`;
+    blocks.appendChild(div);
+  }
+  $('result').hidden = false;
+  $('result').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+}
+
+$('dl').addEventListener('click', async () => {
+  const R = state.result; if (!R) return;
+  const blob = new Blob([R.buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  if (inClaude) {
+    if (!downloads) { toast('Сохранение файла в этом окне недоступно'); return; }
+    try { await downloads.save({ filename: R.filename, data: blob }); toast('Файл сверки сохранён'); }
+    catch (e) {
+      if (e && e.code === 'declined') return;
+      toast(e && e.code === 'rate_limited' ? 'Окно сохранения уже открыто' : 'Не удалось сохранить файл: ' + (e && (e.message || e.code) || 'ошибка'));
+    }
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = R.filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  toast('Файл сверки скачан');
+});
+
+/* =====================================================================
+   ПРИМЕР — выдуманные организации в формате реальных выгрузок
+   ===================================================================== */
+function demoFiles() {
+  const X = window.XLSX;
+  const book = (sheet, aoa) => { const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(aoa), sheet); return X.write(wb, { bookType: 'xlsx', type: 'array' }); };
+  const decl = [
+    ['Номер декларации', 'ИНН', 'КПП', 'Название организации', 'Субъект РФ', 'Статус', 'Сумма платы за выбросы всего (040)', 'Сумма платы за сбросы, всего (080)'],
+    [1001, '7701000011', '770101001', 'ООО «Пример-Сервис»', 'г. Москва', 'Принята', 40000, 12000],
+    [1002, '7702000022', '770201001', 'АО «Учебный завод»', 'г. Москва', 'Принята', 120000, 0],
+    [1003, '7703000033', '770301001', 'ООО «Демо-Логистик»', 'г. Москва', 'Принята', 8000, 4000],
+    [1004, '7704000044', '770401001', 'ГБУ «Тестовый комбинат»', 'г. Москва', 'Принята', 60000, 20000],
+    [1010, '7704000044', '770401001', 'ГБУ «Тестовый комбинат»', 'г. Москва', 'Корректировка', 64000, 20000],
+    [1005, '7705000055', '770501001', 'ООО «Образец»', 'г. Москва', 'Принята', 2000, 800],
+  ];
+  const pays = code => {
+    const rows = [['Номер', 'Дата', 'ИНН плательщика', 'КПП плательщика', 'Сумма платёжного поручения', 'Налоговый период', 'Описание']];
+    if (code === '040') rows.push(
+      [501, '15.07.2026', '7701000011', '770101001', 10000, 'КВ.03.2026', 'Плата НВОС, выбросы'],
+      [502, '20.07.2026', '7702000022', '770201001', 20000, 'КВ.03.2026', 'Плата НВОС, выбросы'],
+      [503, '18.07.2026', '7703000033', '770399001', 2500, 'КВ.03.2026', 'Плата НВОС, выбросы'],
+      [504, '19.07.2026', '7704000044', '770401001', 16000, 'КВ.03.2026', 'Плата НВОС, выбросы'],
+      [505, '02.07.2026', '7709999999', '770901001', 3100, 'КВ.03.2026', 'Плата НВОС, выбросы'],
+      [506, '10.04.2026', '7705000055', '770501001', 500, 'КВ.02.2026', 'Плата НВОС, выбросы'],
+      [507, '21.07.2026', '7701000011', '770101001', 300, 'МС.07.2026', 'Плата НВОС, выбросы'],
+    ); else rows.push(
+      [601, '15.07.2026', '7701000011', '770101001', 3000, 'КВ.03.2026', 'Плата НВОС, сбросы'],
+      [602, '16.07.2026', '7704000044', '770401001', 4000, 'КВ.03.2026', 'Плата НВОС, сбросы'],
+      [603, '17.07.2026', '7703000033', '770301001', 1000, '', 'Плата НВОС, сбросы'],
+    );
+    return rows;
+  };
+  return {
+    decl: { name: 'Пример — декларации 2026.xlsx', buf: book('Декларации', decl) },
+    sbros: { name: 'Пример — платежи сбросы.xlsx', buf: book('Платежи', pays('080')) },
+    vybros: { name: 'Пример — платежи выбросы.xlsx', buf: book('Платежи', pays('040')) },
+  };
+}
+$('btn-demo').addEventListener('click', async () => {
+  if (!window.XLSX) { showError('Не загрузились библиотеки для работы с Excel. Проверьте интернет и обновите страницу.'); return; }
+  const d = demoFiles();
+  for (const k of ['decl', 'sbros', 'vybros']) { state.files[k] = { name: d[k].name, size: d[k].buf.byteLength, buf: d[k].buf, demo: true }; renders[k](); }
+  state.quarter = 3; $('pay-year').value = 2026;
+  $('seg').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.q === '3')));
+  $('period-hint').textContent = HINT_Q;
+  state.demo = true; syncDemo();
+  await run();
+});
+</script>
