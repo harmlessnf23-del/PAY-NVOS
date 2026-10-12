@@ -146,6 +146,8 @@ button,input{font:inherit;color:inherit}
 .dt-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
 .dtbl{width:100%;border-collapse:collapse;font-size:13px;min-width:880px}
 .dtbl td.pn{max-width:220px}
+.dtbl td:first-child{min-width:240px}
+.dtbl .nw{white-space:nowrap}
 .dtbl td.pn span{display:inline-block;font-variant-numeric:tabular-nums;background:var(--surface-2);border-radius:4px;padding:1px 6px;margin:0 4px 4px 0;font-size:12px}
 .dtbl td.pn span.none{background:transparent;color:var(--muted);padding:0}
 .dtbl th{position:sticky;top:0;background:var(--surface);color:var(--muted);font-weight:400;text-align:left;padding:10px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -166,6 +168,11 @@ button,input{font:inherit;color:inherit}
 .st.under{background:var(--warn-soft);color:var(--warn)}
 .st.over{background:var(--info-soft);color:var(--info)}
 .dt-more{align-self:flex-start}
+.cpy{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;gap:4px;cursor:pointer;padding:1px 5px;margin:0 -1px;border-radius:4px;color:var(--fg-2);font-variant-numeric:tabular-nums;user-select:text}
+.cpy svg{color:var(--muted)}
+.cpy:hover{background:var(--accent-soft);color:var(--accent-text)} .cpy:hover svg{color:var(--accent)}
+.cpy:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.cpy.done,.cpy.done svg{color:var(--accent)}
 .dt-empty{padding:20px;text-align:center;color:var(--muted)}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--toast);color:var(--on-accent);padding:10px 16px;border-radius:6px;font-size:13px;z-index:30;max-width:calc(100% - 32px)}
 
@@ -939,6 +946,30 @@ const ST = {
   '❌ Не оплачено': { k: 'debt', row: 'debt',  pill: 'not',   text: 'Не оплачено' },
 };
 const ORDER = { debt: 0, over: 1, ok: 2 };
+const ICON_COPY = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
+const ICON_DONE = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>';
+function cpyBtn(value, label) {
+  const v = esc(value);
+  return `<button type="button" class="cpy" data-v="${v}" data-l="${esc(label)}" title="Скопировать ${esc(label)}" aria-label="Скопировать ${esc(label)} ${v}"><span class="cv">${v}</span>${ICON_COPY}</button>`;
+}
+async function copyValue(btn) {
+  const text = btn.dataset.v, label = btn.dataset.l;
+  const ok = () => {
+    btn.classList.add('done'); btn.querySelector('svg').outerHTML = ICON_DONE;
+    toast(`Скопировано: ${label} ${text}`);
+    setTimeout(() => { if (btn.isConnected) { btn.classList.remove('done'); btn.querySelector('svg').outerHTML = ICON_COPY; } }, 1400);
+  };
+  try { await navigator.clipboard.writeText(text); ok(); return; } catch (e) { /* запасной путь ниже */ }
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  let done = false; try { done = document.execCommand('copy'); } catch (e) { done = false; }
+  ta.remove();
+  if (done) { ok(); return; }
+  const rng = document.createRange(); rng.selectNodeContents(btn.querySelector('.cv'));
+  const sel = getSelection(); sel.removeAllRanges(); sel.addRange(rng);
+  toast('Выделено — нажмите Ctrl+C, чтобы скопировать');
+}
 const PAGE = 100;
 let dtSeq = 0;
 function mountDetails(host, rows, isYear) {
@@ -989,7 +1020,7 @@ function mountDetails(host, rows, isYear) {
       const st = ST[r.status];
       return `<tr class="${st.row}">
         <td><span class="org">${esc(r.name || '—')}</span>
-          <span class="sub">Декларация № ${esc(r.decl_num || '—')} · ИНН ${esc(r.inn || 'не распознан')}</span>
+          <span class="sub nw">Декларация № ${r.decl_num ? cpyBtn(r.decl_num, '№ декларации') : '—'}</span><span class="sub nw">ИНН ${r.inn ? cpyBtn(r.inn, 'ИНН') : 'не распознан'}</span>
           ${r.flags ? `<span class="fl">${esc(r.flags)}</span>` : ''}</td>
         <td class="m r">${fmtMoney(r.year_sum)}</td>
         <td class="m r">${fmtMoney(r.expected)}</td>
@@ -1009,6 +1040,7 @@ function mountDetails(host, rows, isYear) {
     draw();
   });
   q.addEventListener('input', () => { shown = PAGE; draw(); });
+  tbody.addEventListener('click', e => { const b = e.target.closest('.cpy'); if (b) copyValue(b); });
   more.addEventListener('click', () => { shown += PAGE; draw(); });
   draw();
 }
