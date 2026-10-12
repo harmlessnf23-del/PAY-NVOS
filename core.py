@@ -366,6 +366,7 @@ def reconcile_type(decl: DeclData, pays: PayData, sum_key: str, quarter, year=No
     expected_total = 0.0
     paid_total = 0.0
     debtors = []  # для листа «Должники»: не оплачено + недоплата
+    details = []  # расшифровка по декларациям для «Сводки»
     for d in decl.rows:
         if not (d[sum_key] > 0):
             continue
@@ -410,6 +411,12 @@ def reconcile_type(decl: DeclData, pays: PayData, sum_key: str, quarter, year=No
             stats[status] += 1
             expected_total += expected
             paid_total += psum
+            details.append({
+                'decl_num': d['decl_num'], 'inn': d['inn'], 'name': d['name'],
+                'nums': [str(p['num']) for p in plist if p['num'] is not None],
+                'expected': expected, 'paid': psum, 'diff': round(psum - expected, 2),
+                'status': status,
+            })
             if status in ('❌ Не оплачено', '⚠️ Недоплата'):
                 debtors.append({
                     'inn': d['inn'], 'name': d['name'], 'kpp': d['kpp'],
@@ -468,6 +475,7 @@ def reconcile_type(decl: DeclData, pays: PayData, sum_key: str, quarter, year=No
         'decl_ann': decl_ann,
         'pay_ann': pay_ann,
         'debtors': debtors,
+        'details': sort_details(details),
         'stats': {
             'decl_count': len(chosen),
             'paid_ok': stats['✅ Оплачено'],
@@ -485,6 +493,39 @@ def reconcile_type(decl: DeclData, pays: PayData, sum_key: str, quarter, year=No
             'sheet': pays.table['sheet'],
         },
     }
+
+
+# ---------------------------------------------------------------- расшифровка
+
+_GROUP = {'❌ Не оплачено': 0, '⚠️ Недоплата': 0, '💰 Переплата': 1, '✅ Оплачено': 2}
+
+
+def sort_details(details):
+    """Долги (самый большой сверху), затем переплаты (самая большая сверху), затем сошедшиеся."""
+    def key(x):
+        g = _GROUP[x['status']]
+        return (g, x['diff'] if g == 0 else -x['diff'] if g == 1 else 0)
+    return sorted(details, key=key)
+
+
+def fmt_rub(x):
+    return f'{abs(x):,.2f}'.replace(',', ' ').replace('.', ',') + ' ₽'
+
+
+def result_text(det):
+    st = det['status']
+    if st == '❌ Не оплачено':
+        return f'Не оплачено — долг {fmt_rub(det["diff"])}'
+    if st == '⚠️ Недоплата':
+        return f'Недоплата {fmt_rub(det["diff"])}'
+    if st == '💰 Переплата':
+        return f'Переплата {fmt_rub(det["diff"])}'
+    return 'Сошлось'
+
+
+STATUS_FILL = {'❌ Не оплачено': RED, '⚠️ Недоплата': YELLOW, '💰 Переплата': BLUE, '✅ Оплачено': GREEN}
+DETAIL_HEADERS = ['№ декларации', 'ИНН', 'Организация', 'Платёжки (№)',
+                  'Ожидалось, ₽', 'Поступило, ₽', 'Разница, ₽', 'Результат']
 
 
 # ---------------------------------------------------------------- сборка книги
@@ -628,7 +669,7 @@ def build_workbook(decl_path, payment_paths: dict, quarter, out_path, year=None)
             _autosize(dbws)
 
         summary_blocks.append((cfg['title'], res['stats'], pays.table['sheet'],
-                               Path(path).name))
+                               Path(path).name, res['details']))
 
     # --- Сводка ---
     ws = summary_ws
@@ -641,7 +682,7 @@ def build_workbook(decl_path, payment_paths: dict, quarter, out_path, year=None)
     ws.cell(2, 1, f'Файл деклараций: {Path(decl_path).name}'
                   f' (лист «{decl.table["sheet"]}», деклараций: {len(decl.rows)})')
     r = 4
-    for title, st, sheet, fname in summary_blocks:
+    for title, st, sheet, fname, details in summary_blocks:
         ws.cell(r, 1, f'— {title} —').font = Font(bold=True, size=12)
         r += 1
         ws.cell(r, 1, f'Файл платежей: {fname} (лист «{sheet}»)')
@@ -674,9 +715,30 @@ def build_workbook(decl_path, payment_paths: dict, quarter, out_path, year=None)
             ws.cell(r, 1, 'Неучтённые периоды: ' + ', '.join(
                 f'{k or "(пусто)"}: {v}' for k, v in st['skipped_periods'].items()))
             r += 1
+        if details:
+            r += 1
+            ws.cell(r, 1, f'Расшифровка по декларациям — {title}').font = Font(bold=True, size=12)
+            r += 1
+            for i, h in enumerate(DETAIL_HEADERS, 1):
+                cell = ws.cell(r, i, h)
+                cell.font = BOLD_BLUE
+                cell.alignment = CENTER
+            r += 1
+            for det in details:
+                vals = [det['decl_num'], det['inn'], det['name'], ', '.join(det['nums']),
+                        det['expected'], det['paid'], det['diff'], result_text(det)]
+                fill = STATUS_FILL[det['status']]
+                for i, v in enumerate(vals, 1):
+                    cell = ws.cell(r, i, v)
+                    if i in (5, 6, 7):
+                        cell.number_format = MONEY_FMT
+                    cell.fill = fill
+                r += 1
         r += 1
     ws.column_dimensions['A'].width = 42
     ws.column_dimensions['B'].width = 20
+    for col, w in (('C', 40), ('D', 30), ('E', 16), ('F', 16), ('G', 16), ('H', 30)):
+        ws.column_dimensions[col].width = w
 
     out.save(out_path)
     return all_stats

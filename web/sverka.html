@@ -144,7 +144,10 @@ button,input{font:inherit;color:inherit}
 .dt-q{flex:1 1 220px;min-width:0;max-width:340px;height:36px;border:0;border-radius:6px;background:var(--surface-2);padding:0 12px;font-size:13px}
 .dt-q:focus{outline:2px solid var(--accent);outline-offset:0}
 .dt-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
-.dtbl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
+.dtbl{width:100%;border-collapse:collapse;font-size:13px;min-width:880px}
+.dtbl td.pn{max-width:220px}
+.dtbl td.pn span{display:inline-block;font-variant-numeric:tabular-nums;background:var(--surface-2);border-radius:4px;padding:1px 6px;margin:0 4px 4px 0;font-size:12px}
+.dtbl td.pn span.none{background:transparent;color:var(--muted);padding:0}
 .dtbl th{position:sticky;top:0;background:var(--surface);color:var(--muted);font-weight:400;text-align:left;padding:10px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
 .dtbl th.r,.dtbl td.r{text-align:right}
 .dtbl td{padding:10px 10px;border-bottom:1px solid var(--line);vertical-align:top}
@@ -567,7 +570,8 @@ function makeCore(XLSX, ExcelJS) {
       if (isChosen || !d.inn_key) {
         stats[status] += 1; expectedTotal += expected; paidTotal += psum;
         details.push({ decl_num: d.decl_num, inn: d.inn, name: d.name, year_sum: d[sumKey], expected, paid: psum,
-                       diff: r2(psum - expected), count: plist.length, status, flags: flags.join(' · ') });
+                       diff: r2(psum - expected), count: plist.length, status, flags: flags.join(' · '),
+                       nums: plist.filter(p => p.num !== null && p.num !== undefined).map(p => pyStr(p.num)) });
         if (status === S_NOT || status === S_UNDER) debtors.push({
           inn: d.inn, name: d.name, kpp: d.kpp, subject: d.subject, decl_status: d.status,
           decl_num: d.decl_num, year_sum: d[sumKey], expected, paid: psum, rest: r2(expected - psum), status,
@@ -608,7 +612,7 @@ function makeCore(XLSX, ExcelJS) {
     for (const list of counted.values()) for (const p of list) countedSum += p.amount;
     const skippedTop = [...skipped.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
     let skippedTotal = 0; for (const n of skipped.values()) skippedTotal += n;
-    return { declAnn, payAnn, debtors, details, skippedTop, stats: {
+    return { declAnn, payAnn, debtors, details: sortDetails(details), skippedTop, stats: {
       decl_count: chosen.size, paid_ok: stats[S_OK], overpaid: stats[S_OVER],
       underpaid: stats[S_UNDER], not_paid: stats[S_NOT],
       expected_total: r2(expectedTotal), paid_total: r2(paidTotal),
@@ -617,6 +621,25 @@ function makeCore(XLSX, ExcelJS) {
       sheet: pays.table.sheet,
     } };
   }
+
+  // ---------- расшифровка
+  const GROUP = { [S_NOT]: 0, [S_UNDER]: 0, [S_OVER]: 1, [S_OK]: 2 };
+  function sortDetails(list) {
+    const key = x => { const g = GROUP[x.status]; return [g, g === 0 ? x.diff : g === 1 ? -x.diff : 0]; };
+    return list.map((x, i) => [key(x), i, x]).sort((a, b) => a[0][0] - b[0][0] || a[0][1] - b[0][1] || a[1] - b[1]).map(t => t[2]);
+  }
+  function fmtRub(x) {
+    const [i, f] = Math.abs(x).toFixed(2).split('.');
+    return i.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ',' + f + ' ₽';
+  }
+  function resultText(d) {
+    if (d.status === S_NOT) return `Не оплачено — долг ${fmtRub(d.diff)}`;
+    if (d.status === S_UNDER) return `Недоплата ${fmtRub(d.diff)}`;
+    if (d.status === S_OVER) return `Переплата ${fmtRub(d.diff)}`;
+    return 'Сошлось';
+  }
+  const STATUS_FILL = { [S_NOT]: RED, [S_UNDER]: YELLOW, [S_OVER]: BLUE, [S_OK]: GREEN };
+  const DETAIL_HEADERS = ['№ декларации', 'ИНН', 'Организация', 'Платёжки (№)', 'Ожидалось, ₽', 'Поступило, ₽', 'Разница, ₽', 'Результат'];
 
   // ---------- сборка книги
   function colLetter(n) { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
@@ -727,7 +750,7 @@ function makeCore(XLSX, ExcelJS) {
         ws.autoFilter = `A1:K${res.debtors.length + 1}`;
         sz.apply(ws);
       }
-      blocks.push({ title: cfg.title, st: res.stats, sheet: pays.table.sheet, fname: pf.name, skipped: res.skippedTop });
+      blocks.push({ title: cfg.title, st: res.stats, sheet: pays.table.sheet, fname: pf.name, skipped: res.skippedTop, details: res.details });
     }
 
     // Сводка
@@ -761,9 +784,26 @@ function makeCore(XLSX, ExcelJS) {
         r++;
       }
       if (b.skipped.length) { ws.getCell(r, 1).value = 'Неучтённые периоды: ' + b.skipped.map(([k, n]) => `${k || '(пусто)'}: ${n}`).join(', '); r++; }
+      if (b.details.length) {
+        r++;
+        const h = ws.getCell(r, 1); h.value = `Расшифровка по декларациям — ${b.title}`; h.font = { bold: true, size: 12 }; r++;
+        DETAIL_HEADERS.forEach((t, i) => { const c = ws.getCell(r, i + 1); c.value = t; c.font = BOLD_BLUE; c.alignment = CENTER; });
+        r++;
+        for (const d of b.details) {
+          const f = STATUS_FILL[d.status];
+          [d.decl_num, d.inn, d.name, d.nums.join(', '), d.expected, d.paid, d.diff, resultText(d)].forEach((v, i) => {
+            const c = ws.getCell(r, i + 1);
+            if (v !== null && v !== undefined && v !== '') c.value = v;
+            if (i >= 4 && i <= 6) c.numFmt = MONEY_FMT;
+            c.fill = f;
+          });
+          r++;
+        }
+      }
       r++;
     }
     ws.getColumn(1).width = 42; ws.getColumn(2).width = 20;
+    [[3, 40], [4, 30], [5, 16], [6, 16], [7, 16], [8, 30]].forEach(([c, w]) => { ws.getColumn(c).width = w; });
 
     const buffer = await out.xlsx.writeBuffer();
     return { buffer, stats: allStats, details: allDetails };
@@ -922,11 +962,11 @@ function mountDetails(host, rows, isYear) {
         <button type="button" data-f="over" aria-pressed="false">Переплата <span class="n">${fmtInt(cnt.over)}</span></button>
         <button type="button" data-f="ok" aria-pressed="false">Сходится <span class="n">${fmtInt(cnt.ok)}</span></button>
       </div>
-      <input type="search" class="dt-q" id="${id}-q" placeholder="ИНН, название или № декларации" aria-label="Поиск по декларациям">
+      <input type="search" class="dt-q" id="${id}-q" placeholder="ИНН, название, № декларации или платёжки" aria-label="Поиск по декларациям">
     </div>
     <div class="dt-wrap"><table class="dtbl">
       <thead><tr><th>Декларация</th><th class="r">Сумма по декларации, год</th><th class="r">${isYear ? 'К оплате за год' : 'К оплате за квартал'}</th>
-        <th class="r">Поступило</th><th class="r">Разница</th><th>Статус</th></tr></thead>
+        <th class="r">Поступило</th><th>Платёжки (№)</th><th class="r">Разница</th><th>Статус</th></tr></thead>
       <tbody></tbody></table></div>
     <button type="button" class="btn dt-more" hidden></button>`;
   host.appendChild(box);
@@ -935,7 +975,7 @@ function mountDetails(host, rows, isYear) {
   function list() {
     const s = q.value.trim().toLowerCase();
     return sorted.filter(r => (filter === 'all' || ST[r.status].k === filter) &&
-      (!s || String(r.inn || '').includes(s) || String(r.name || '').toLowerCase().includes(s) || String(r.decl_num).includes(s)));
+      (!s || String(r.inn || '').includes(s) || String(r.name || '').toLowerCase().includes(s) || String(r.decl_num).includes(s) || r.nums.some(n => n.includes(s))));
   }
   function diffCell(r) {
     if (!r.count) return `<td class="m r d-neg">−${fmtMoney(r.expected)}</td>`;
@@ -944,16 +984,17 @@ function mountDetails(host, rows, isYear) {
   }
   function draw() {
     const L = list();
-    if (!L.length) { tbody.innerHTML = `<tr><td colspan="6" class="dt-empty">Ничего не найдено</td></tr>`; more.hidden = true; return; }
+    if (!L.length) { tbody.innerHTML = `<tr><td colspan="7" class="dt-empty">Ничего не найдено</td></tr>`; more.hidden = true; return; }
     tbody.innerHTML = L.slice(0, shown).map(r => {
       const st = ST[r.status];
       return `<tr class="${st.row}">
         <td><span class="org">${esc(r.name || '—')}</span>
-          <span class="sub">№ ${esc(r.decl_num || '—')} · ИНН ${esc(r.inn || 'не распознан')}${r.count ? ` · платёжек: ${r.count}` : ''}</span>
+          <span class="sub">Декларация № ${esc(r.decl_num || '—')} · ИНН ${esc(r.inn || 'не распознан')}</span>
           ${r.flags ? `<span class="fl">${esc(r.flags)}</span>` : ''}</td>
         <td class="m r">${fmtMoney(r.year_sum)}</td>
         <td class="m r">${fmtMoney(r.expected)}</td>
         <td class="m r">${r.count ? fmtMoney(r.paid) : '—'}</td>
+        <td class="pn">${r.nums.length ? r.nums.map(n => `<span>${esc(n)}</span>`).join('') : (r.count ? `${r.count} шт. без номера` : '<span class="none">нет платежей</span>')}</td>
         ${diffCell(r)}
         <td><span class="st ${st.pill}">${st.k === 'ok' ? '✓ ' : ''}${st.text}</span></td></tr>`;
     }).join('');
